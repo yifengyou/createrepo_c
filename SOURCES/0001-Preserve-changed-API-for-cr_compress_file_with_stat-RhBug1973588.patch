@@ -1,0 +1,384 @@
+From 6bcfaac228236ac3c609d014cbd23c3bd645bf18 Mon Sep 17 00:00:00 2001
+From: Aleš Matěj <amatej@redhat.com>
+Date: Thu, 9 Sep 2021 08:31:03 +0200
+Subject: [PATCH] Preserve changed API for cr_compress_file_with_stat (RhBug:1973588)
+
+In order to be compatible in rhel8 we want to preserve the old API and
+behavior.
+
+Keep the fixed version as cr_compress_file_with_stat_v2 only for rhel8
+
+https://bugzilla.redhat.com/show_bug.cgi?id=1973588
+
+With fixed memory leak of `tmp_err`, reported here:
+https://bugzilla.redhat.com/show_bug.cgi?id=2005781
+---
+ src/misc.c              | 139 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ src/misc.h              |  42 ++++++++++++++++++++++++++++++++++++++++--
+ src/modifyrepo_shared.c |   4 ++--
+ src/python/misc-py.c    |   2 +-
+ src/threads.c           |  14 +++++++-------
+ tests/test_misc.c       |  34 +++++++++++++++++-----------------
+ 6 files changed, 205 insertions(+), 30 deletions(-)
+
+diff --git a/src/misc.c b/src/misc.c
+index 4bd9f4c..c4b2cb3 100644
+--- a/src/misc.c
++++ b/src/misc.c
+@@ -446,7 +446,7 @@ cr_copy_file(const char *src, const char *in_dst, GError **err)
+ 
+ int
+ cr_compress_file_with_stat(const char *src,
+-                           const char *in_dst,
++                           char **in_dst,
+                            cr_CompressionType compression,
+                            cr_ContentStat *stat,
+                            const char *zck_dict_dir,
+@@ -458,6 +458,143 @@ cr_compress_file_with_stat(const char *src,
+     char buf[BUFFER_SIZE];
+     CR_FILE *orig = NULL;
+     CR_FILE *new = NULL;
++    gchar *dst = (gchar *) *in_dst;
++    GError *tmp_err = NULL;
++
++    assert(src);
++    assert(!err || *err == NULL);
++
++    const char *c_suffix = cr_compression_suffix(compression);
++
++    // Src must be a file NOT a directory
++    if (!g_file_test(src, G_FILE_TEST_IS_REGULAR)) {
++        g_debug("%s: Source (%s) must be a regular file!", __func__, src);
++        g_set_error(err, ERR_DOMAIN, CRE_NOFILE,
++                    "Not a regular file: %s", src);
++        return CRE_NOFILE;
++    }
++
++    if (!dst) {
++        // If destination is NULL, use src + compression suffix
++        *in_dst = g_strconcat(src,
++                              c_suffix,
++                              NULL);
++    } else if (g_str_has_suffix(dst, "/")) {
++        // If destination is dir use filename from src + compression suffix
++        *in_dst = g_strconcat(dst,
++                              cr_get_filename(src),
++                              c_suffix,
++                              NULL);
++    } else if (c_suffix && !g_str_has_suffix(dst, c_suffix)) {
++        cr_CompressionType old_type = cr_detect_compression(src, &tmp_err);
++        if (tmp_err) {
++            g_debug("%s: Unable to detect compression type of %s", __func__, src);
++            g_clear_error(&tmp_err);
++        } else if (old_type != CR_CW_NO_COMPRESSION) {
++            _cleanup_free_ gchar *tmp_file = g_strndup(dst, strlen(dst) - strlen(cr_compression_suffix(old_type)));
++            *in_dst = g_strconcat(tmp_file,
++                                  c_suffix,
++                                  NULL);
++        }
++    }
++    if (dst != *in_dst && dst)
++        g_free(dst);
++    dst = (gchar *) *in_dst;
++
++    int mode = CR_CW_AUTO_DETECT_COMPRESSION;
++
++    orig = cr_open(src,
++                   CR_CW_MODE_READ,
++                   mode,
++                   &tmp_err);
++    if (!orig) {
++        ret = tmp_err->code;
++        g_propagate_prefixed_error(err, tmp_err, "Cannot open %s: ", src);
++        return ret;
++    }
++
++    _cleanup_free_ gchar *dict = NULL;
++    size_t dict_size = 0;
++    if (compression == CR_CW_ZCK_COMPRESSION && zck_dict_dir) {
++        /* Find zdict */
++        _cleanup_free_ gchar *file_basename = NULL;
++        if (dst) {
++            _cleanup_free_ gchar *dict_base = NULL;
++            if (g_str_has_suffix(dst, ".zck"))
++                dict_base = g_strndup(dst, strlen(dst)-4);
++            else
++                dict_base = g_strdup(dst);
++            file_basename = g_path_get_basename(dict_base);
++        } else {
++            file_basename = g_path_get_basename(src);
++        }
++        _cleanup_free_ gchar *dict_file = cr_get_dict_file(zck_dict_dir, file_basename);
++
++        /* Read dictionary from file */
++        if (dict_file && !g_file_get_contents(dict_file, &dict,
++                                             &dict_size, &tmp_err)) {
++            g_set_error(err, ERR_DOMAIN, CRE_IO,
++                        "Error reading zchunk dict %s: %s",
++                        dict_file, tmp_err->message);
++            g_clear_error(&tmp_err);
++            ret = CRE_IO;
++            goto compress_file_cleanup;
++        }
++    }
++
++    new = cr_sopen(dst, CR_CW_MODE_WRITE, compression, stat, &tmp_err);
++    if (tmp_err) {
++        g_debug("%s: Cannot open destination file %s", __func__, dst);
++        g_propagate_prefixed_error(err, tmp_err, "Cannot open %s: ", dst);
++        ret = CRE_IO;
++        goto compress_file_cleanup;
++    }
++    if (compression == CR_CW_ZCK_COMPRESSION) {
++        if (dict && cr_set_dict(new, dict, dict_size, &tmp_err) != CRE_OK) {
++            ret = tmp_err->code;
++            g_propagate_prefixed_error(err, tmp_err, "Unable to set zdict for %s: ", dst);
++            goto compress_file_cleanup;
++        }
++        if (zck_auto_chunk && cr_set_autochunk(new, TRUE, &tmp_err) != CRE_OK) {
++            ret = tmp_err->code;
++            g_propagate_prefixed_error(err, tmp_err, "Unable to set auto-chunking for %s: ", dst);
++            goto compress_file_cleanup;
++        }
++    }
++    while ((readed = cr_read(orig, buf, BUFFER_SIZE, &tmp_err)) > 0) {
++        cr_write(new, buf, readed, &tmp_err);
++        if (tmp_err) {
++            ret = tmp_err->code;
++            g_propagate_prefixed_error(err, tmp_err, "Unable to write to %s: ", dst);
++            goto compress_file_cleanup;
++        }
++    }
++
++compress_file_cleanup:
++
++    if (orig)
++        cr_close(orig, NULL);
++
++    if (new)
++        cr_close(new, NULL);
++
++    return ret;
++}
++
++int
++cr_compress_file_with_stat_v2(const char *src,
++                              const char *in_dst,
++                              cr_CompressionType compression,
++                              cr_ContentStat *stat,
++                              const char *zck_dict_dir,
++                              gboolean zck_auto_chunk,
++                              GError **err)
++{
++    int ret = CRE_OK;
++    int readed;
++    char buf[BUFFER_SIZE];
++    CR_FILE *orig = NULL;
++    CR_FILE *new = NULL;
+     gchar *dst = (gchar *) in_dst;
+     GError *tmp_err = NULL;
+ 
+diff --git a/src/misc.h b/src/misc.h
+index 60f1a0f..528ccc3 100644
+--- a/src/misc.h
++++ b/src/misc.h
+@@ -184,9 +184,24 @@ gboolean cr_copy_file(const char *src,
+                     cr_compress_file_with_stat(SRC, DST, COMTYPE, NULL, ZCK_DICT_DIR, \
+                                                ZCK_AUTO_CHUNK, ERR)
+ 
++/** Compress file. This function is temporary and present
++ * only in rhel 8, it will be removed in future versions.
++ * @param SRC           source filename
++ * @param DST           destination (If dst is dir, filename of src +
++ *                      compression suffix is used.
++ *                      If dst is NULL, src + compression suffix is used)
++ * @param COMTYPE       type of compression
++ * @param ZCK_DICT_DIR  Location of zchunk zdicts (if zchunk is enabled)
++ * @param ZCK_AUTO_CHUNK Whether zchunk file should be auto-chunked
++ * @param ERR           GError **
++ * @return              cr_Error return code
++ */
++#define cr_compress_file_v2(SRC, DST, COMTYPE, ZCK_DICT_DIR, ZCK_AUTO_CHUNK, ERR) \
++                    cr_compress_file_with_stat_v2(SRC, DST, COMTYPE, NULL, ZCK_DICT_DIR, \
++                                               ZCK_AUTO_CHUNK, ERR)
+ /** Compress file.
+  * @param src           source filename
+- * @param dst           destination (If dst is dir, filename of src +
++ * @param dst           pointer to destination (If dst is dir, filename of src +
+  *                      compression suffix is used.
+  *                      If dst is NULL, src + compression suffix is used)
+  * @param comtype       type of compression
+@@ -197,13 +212,36 @@ gboolean cr_copy_file(const char *src,
+  * @return              cr_Error return code
+  */
+ int cr_compress_file_with_stat(const char *src,
+-                               const char *dst,
++                               char **dst,
+                                cr_CompressionType comtype,
+                                cr_ContentStat *stat,
+                                const char *zck_dict_dir,
+                                gboolean zck_auto_chunk,
+                                GError **err);
+ 
++/** Compress file with stat versions 2. This function is temporary and present
++ * only in rhel 8, it will be removed in future versions.
++ * It is a compatibility function that preserves the API and behavior of
++ * cr_compress_file_with_stat from createrepo_c-0.12.0.
++ * @param src           source filename
++ * @param dst           destination (If dst is dir, filename of src +
++ *                      compression suffix is used.
++ *                      If dst is NULL, src + compression suffix is used)
++ * @param comtype       type of compression
++ * @param stat          pointer to cr_ContentStat or NULL
++ * @param zck_dict_dir  Location of zchunk zdicts (if zchunk is enabled)
++ * @param zck_auto_chunk Whether zchunk file should be auto-chunked
++ * @param err           GError **
++ * @return              cr_Error return code
++ */
++int cr_compress_file_with_stat_v2(const char *src,
++                                  const char *dst,
++                                  cr_CompressionType comtype,
++                                  cr_ContentStat *stat,
++                                  const char *zck_dict_dir,
++                                  gboolean zck_auto_chunk,
++                                  GError **err);
++
+ /** Decompress file.
+  * @param SRC           source filename
+  * @param DST           destination (If dst is dir, filename of src without
+diff --git a/src/modifyrepo_shared.c b/src/modifyrepo_shared.c
+index 4e59660..8cf246d 100644
+--- a/src/modifyrepo_shared.c
++++ b/src/modifyrepo_shared.c
+@@ -120,8 +120,8 @@ cr_write_file(gchar *repopath, cr_ModifyRepoTask *task,
+         g_debug("%s: Copy & compress operation %s -> %s",
+                  __func__, src_fn, dst_fn);
+ 
+-        if (cr_compress_file(src_fn, dst_fn, compress_type,
+-                             task->zck_dict_dir, TRUE, err) != CRE_OK) {
++        if (cr_compress_file_v2(src_fn, dst_fn, compress_type,
++                                task->zck_dict_dir, TRUE, err) != CRE_OK) {
+             g_debug("%s: Copy & compress operation failed", __func__);
+             return NULL;
+         }
+diff --git a/src/python/misc-py.c b/src/python/misc-py.c
+index 6a7871e..cc28448 100644
+--- a/src/python/misc-py.c
++++ b/src/python/misc-py.c
+@@ -49,7 +49,7 @@ py_compress_file_with_stat(G_GNUC_UNUSED PyObject *self, PyObject *args)
+             return NULL;
+     }
+ 
+-    cr_compress_file_with_stat(src, dst, type, contentstat, NULL, FALSE, &tmp_err);
++    cr_compress_file_with_stat_v2(src, dst, type, contentstat, NULL, FALSE, &tmp_err);
+     if (tmp_err) {
+         nice_exception(&tmp_err, NULL);
+         return NULL;
+diff --git a/src/threads.c b/src/threads.c
+index f0c3f93..b529d55 100644
+--- a/src/threads.c
++++ b/src/threads.c
+@@ -101,13 +101,13 @@ cr_compressing_thread(gpointer data, G_GNUC_UNUSED gpointer user_data)
+                                 cr_compression_suffix(task->type),
+                                 NULL);
+ 
+-    cr_compress_file_with_stat(task->src,
+-                               task->dst,
+-                               task->type,
+-                               task->stat,
+-                               task->zck_dict_dir,
+-                               task->zck_auto_chunk,
+-                               &tmp_err);
++    cr_compress_file_with_stat_v2(task->src,
++                                  task->dst,
++                                  task->type,
++                                  task->stat,
++                                  task->zck_dict_dir,
++                                  task->zck_auto_chunk,
++                                  &tmp_err);
+ 
+     if (tmp_err) {
+         // Error encountered
+diff --git a/tests/test_misc.c b/tests/test_misc.c
+index 6614809..1acccb7 100644
+--- a/tests/test_misc.c
++++ b/tests/test_misc.c
+@@ -548,8 +548,8 @@ compressfile_test_text_file(Copyfiletest *copyfiletest,
+     GError *tmp_err = NULL;
+ 
+     g_assert(!g_file_test(copyfiletest->dst_file, G_FILE_TEST_EXISTS));
+-    ret = cr_compress_file(TEST_TEXT_FILE, copyfiletest->dst_file,
+-                           CR_CW_GZ_COMPRESSION, NULL, FALSE, &tmp_err);
++    ret = cr_compress_file_v2(TEST_TEXT_FILE, copyfiletest->dst_file,
++                              CR_CW_GZ_COMPRESSION, NULL, FALSE, &tmp_err);
+     g_assert(!tmp_err);
+     g_assert_cmpint(ret, ==, CRE_OK);
+     g_assert(g_file_test(copyfiletest->dst_file, G_FILE_TEST_IS_REGULAR));
+@@ -574,9 +574,9 @@ compressfile_with_stat_test_text_file(Copyfiletest *copyfiletest,
+     g_assert(!tmp_err);
+ 
+     g_assert(!g_file_test(copyfiletest->dst_file, G_FILE_TEST_EXISTS));
+-    ret = cr_compress_file_with_stat(TEST_TEXT_FILE, copyfiletest->dst_file,
+-                                     CR_CW_GZ_COMPRESSION, stat, NULL, FALSE,
+-                                     &tmp_err);
++    ret = cr_compress_file_with_stat_v2(TEST_TEXT_FILE, copyfiletest->dst_file,
++                                        CR_CW_GZ_COMPRESSION, stat, NULL, FALSE,
++                                        &tmp_err);
+     g_assert(!tmp_err);
+     g_assert_cmpint(ret, ==, CRE_OK);
+     g_assert(g_file_test(copyfiletest->dst_file, G_FILE_TEST_IS_REGULAR));
+@@ -603,9 +603,9 @@ compressfile_with_stat_test_gz_file_gz_output(Copyfiletest *copyfiletest,
+     char * dst_full_name = g_strconcat(copyfiletest->dst_file, ".gz", NULL);
+ 
+     g_assert(!g_file_test(dst_full_name, G_FILE_TEST_EXISTS));
+-    ret = cr_compress_file_with_stat(TEST_TEXT_FILE_GZ, dst_full_name,
+-                                     CR_CW_GZ_COMPRESSION, stat, NULL, FALSE,
+-                                     &tmp_err);
++    ret = cr_compress_file_with_stat_v2(TEST_TEXT_FILE_GZ, dst_full_name,
++                                        CR_CW_GZ_COMPRESSION, stat, NULL, FALSE,
++                                        &tmp_err);
+     g_assert(!tmp_err);
+     g_assert_cmpint(ret, ==, CRE_OK);
+     g_assert(g_file_test(dst_full_name, G_FILE_TEST_IS_REGULAR));
+@@ -633,9 +633,9 @@ compressfile_test_gz_file_xz_output(Copyfiletest *copyfiletest,
+     char * dst_full_name = g_strconcat(copyfiletest->dst_file, ".xz", NULL);
+ 
+     g_assert(!g_file_test(dst_full_name, G_FILE_TEST_EXISTS));
+-    ret = cr_compress_file(TEST_TEXT_FILE_GZ, dst_full_name,
+-                                     CR_CW_XZ_COMPRESSION, NULL, FALSE,
+-                                     &tmp_err);
++    ret = cr_compress_file_v2(TEST_TEXT_FILE_GZ, dst_full_name,
++                              CR_CW_XZ_COMPRESSION, NULL, FALSE,
++                              &tmp_err);
+     g_assert(!tmp_err);
+     g_assert_cmpint(ret, ==, CRE_OK);
+     g_assert(g_file_test(dst_full_name, G_FILE_TEST_IS_REGULAR));
+@@ -660,9 +660,9 @@ compressfile_test_xz_file_gz_output(Copyfiletest *copyfiletest,
+     char * dst_full_name = g_strconcat(copyfiletest->dst_file, ".gz", NULL);
+ 
+     g_assert(!g_file_test(dst_full_name, G_FILE_TEST_EXISTS));
+-    ret = cr_compress_file(TEST_TEXT_FILE_XZ, dst_full_name,
+-                                     CR_CW_GZ_COMPRESSION, NULL, FALSE,
+-                                     &tmp_err);
++    ret = cr_compress_file_v2(TEST_TEXT_FILE_XZ, dst_full_name,
++                              CR_CW_GZ_COMPRESSION, NULL, FALSE,
++                              &tmp_err);
+     g_assert(!tmp_err);
+     g_assert_cmpint(ret, ==, CRE_OK);
+     g_assert(g_file_test(dst_full_name, G_FILE_TEST_IS_REGULAR));
+@@ -687,9 +687,9 @@ compressfile_test_sqlite_file_gz_output(Copyfiletest *copyfiletest,
+     char * dst_full_name = g_strconcat(copyfiletest->dst_file, ".gz", NULL);
+ 
+     g_assert(!g_file_test(dst_full_name, G_FILE_TEST_EXISTS));
+-    ret = cr_compress_file(TEST_SQLITE_FILE, dst_full_name,
+-                                     CR_CW_GZ_COMPRESSION, NULL, FALSE,
+-                                     &tmp_err);
++    ret = cr_compress_file_v2(TEST_SQLITE_FILE, dst_full_name,
++                              CR_CW_GZ_COMPRESSION, NULL, FALSE,
++                              &tmp_err);
+     g_assert(!tmp_err);
+     g_assert_cmpint(ret, ==, CRE_OK);
+     g_assert(g_file_test(dst_full_name, G_FILE_TEST_EXISTS));
+--
+libgit2 1.1.0
+

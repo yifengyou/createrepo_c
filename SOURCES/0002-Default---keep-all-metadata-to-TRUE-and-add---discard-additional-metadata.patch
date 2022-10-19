@@ -1,0 +1,94 @@
+From b5f425fec738c1de344f4f917d3614e9efb98e2b Mon Sep 17 00:00:00 2001
+From: Aleš Matěj <amatej@redhat.com>
+Date: Thu, 23 Sep 2021 08:30:47 +0200
+Subject: [PATCH] Default --keep-all-metadata to TRUE and add --discard-additional-metadata
+
+= changelog =
+msg: Switch default of --keep-all-metadata to TRUE and add --discard-additional-metadata
+type: enhancement
+resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1992209
+---
+ doc/createrepo_c.8 |  7 +++++--
+ src/cmd_parser.c   | 15 ++++++++++++---
+ src/cmd_parser.h   |  1 +
+ 3 files changed, 18 insertions(+), 5 deletions(-)
+
+diff --git a/doc/createrepo_c.8 b/doc/createrepo_c.8
+index c9017c5..1a3e101 100644
+--- a/doc/createrepo_c.8
++++ b/doc/createrepo_c.8
+@@ -1,6 +1,6 @@
+ .\" Man page generated from reStructuredText.
+ .
+-.TH CREATEREPO_C 8 "2020-07-02" "" ""
++.TH CREATEREPO_C 8 "2021-09-23" "" ""
+ .SH NAME
+ createrepo_c \- Create rpm-md format (xml-rpm-metadata) repository
+ .
+@@ -173,7 +173,10 @@ Generate zchunk files as well as the standard repodata.
+ Directory containing compression dictionaries for use by zchunk
+ .SS \-\-keep\-all\-metadata
+ .sp
+-Keep all additional metadata (not primary, filelists and other xml or sqlite files, nor their compressed variants) from source repository during update.
++Keep all additional metadata (not primary, filelists and other xml or sqlite files, nor their compressed variants) from source repository during update (default).
++.SS \-\-discard\-additional\-metadata
++.sp
++Discard all additional metadata (not primary, filelists and other xml or sqlite files, nor their compressed variants) from source repository during update.
+ .SS \-\-compatibility
+ .sp
+ Enforce maximal compatibility with classical createrepo (Affects only: \-\-retain\-old\-md).
+diff --git a/src/cmd_parser.c b/src/cmd_parser.c
+index bbefa08..639d7e9 100644
+--- a/src/cmd_parser.c
++++ b/src/cmd_parser.c
+@@ -65,6 +65,8 @@ struct CmdOptions _cmd_options = {
+         .zck_compression            = FALSE,
+         .zck_dict_dir               = NULL,
+         .recycle_pkglist            = FALSE,
++
++        .keep_all_metadata          = TRUE,
+     };
+ 
+ 
+@@ -168,6 +170,9 @@ static GOptionEntry cmd_entries[] =
+ #endif
+     { "keep-all-metadata", 0, 0, G_OPTION_ARG_NONE, &(_cmd_options.keep_all_metadata),
+       "Keep all additional metadata (not primary, filelists and other xml or sqlite files, "
++      "nor their compressed variants) from source repository during update (default).", NULL },
++    { "discard-additional-metadata", 0, 0, G_OPTION_ARG_NONE, &(_cmd_options.discard_additional_metadata),
++      "Discard all additional metadata (not primary, filelists and other xml or sqlite files, "
+       "nor their compressed variants) from source repository during update.", NULL },
+     { "compatibility", 0, 0, G_OPTION_ARG_NONE, &(_cmd_options.compatibility),
+       "Enforce maximal compatibility with classical createrepo (Affects only: --retain-old-md).", NULL },
+@@ -510,9 +515,13 @@ check_arguments(struct CmdOptions *options,
+         x++;
+     }
+ 
+-    // Check keep-all-metadata
+-    if (options->keep_all_metadata && !options->update) {
+-        g_warning("--keep-all-metadata has no effect (--update is not used)");
++    if (options->discard_additional_metadata) {
++        options->keep_all_metadata = FALSE;
++    }
++
++    // Check discard-additional-metadata
++    if (options->discard_additional_metadata && !options->update) {
++        g_warning("--discard-additional-metadata has no effect (--update is not used)");
+     }
+ 
+     // Process --distro tags
+diff --git a/src/cmd_parser.h b/src/cmd_parser.h
+index 32bcf99..03cfcf0 100644
+--- a/src/cmd_parser.h
++++ b/src/cmd_parser.h
+@@ -77,6 +77,7 @@ struct CmdOptions {
+     char *zck_dict_dir;         /*!< directory with zchunk dictionaries */
+     gboolean keep_all_metadata; /*!< keep groupfile and updateinfo from source
+                                      repo during update */
++    gboolean discard_additional_metadata; /*!< Inverse option to keep_all_metadata */
+     gboolean ignore_lock;       /*!< Ignore existing .repodata/ - remove it,
+                                      create the new one (empty) to serve as
+                                      a lock and use a .repodata.date.pid for
+--
+libgit2 1.1.0
+

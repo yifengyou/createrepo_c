@@ -1,0 +1,220 @@
+.\" Man page generated from reStructuredText.
+.
+.TH CREATEREPO_C 8 "2021-09-23" "" ""
+.SH NAME
+createrepo_c \- Create rpm-md format (xml-rpm-metadata) repository
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.\" -*- coding: utf-8 -*-
+.
+.SH SYNOPSIS
+.sp
+createrepo_c [options] <directory>
+.SH DESCRIPTION
+.sp
+Uses rpm packages from <directory> to create repodata.
+.sp
+If compiled with libmodulemd support modular metadata inside <directory> identified by the patterns below and all their compressed variants are automatically collected, merged and added to the repodata.
+.sp
+The patterns are:
+.INDENT 0.0
+.INDENT 3.5
+.INDENT 0.0
+.IP \(bu 2
+*.modulemd.yaml (recommended file name: N:S:V:C:A.modulemd.yaml)
+.IP \(bu 2
+*.modulemd\-defaults.yaml (recommended file name: N.modulemd\-defaults.yaml)
+.IP \(bu 2
+modules.yaml (recommended way of importing multiple documents at once)
+.UNINDENT
+.UNINDENT
+.UNINDENT
+.SH OPTIONS
+.SS \-V \-\-version
+.sp
+Show program\(aqs version number and exit.
+.SS \-q \-\-quiet
+.sp
+Run quietly.
+.SS \-v \-\-verbose
+.sp
+Run verbosely.
+.SS \-x \-\-excludes PACKAGE_NAME_GLOB
+.sp
+Path patterns to exclude, can be specified multiple times.  The patterns are
+matched against relative paths to RPMs.  Note that the feature uses
+\fBg\_pattern\_match()\fR function, not \fBglob()\fR, for semantic differences
+see https://developer.gnome.org/glib/stable/glib-Glob-style-pattern-matching.html
+.SS \-\-basedir BASEDIR
+.sp
+Basedir for path to directories.
+.SS \-u \-\-baseurl URL
+.sp
+Optional base URL location for all files.
+.SS \-g \-\-groupfile GROUPFILE
+.sp
+Path to groupfile to include in metadata.
+.SS \-s \-\-checksum CHECKSUM_TYPE
+.sp
+Choose the checksum type used in repomd.xml and for packages in the metadata. The default is now sha256.
+.SS \-p \-\-pretty
+.sp
+Make sure all xml generated is formatted (default)
+.SS \-d \-\-database
+.sp
+Generate sqlite databases for use with yum.
+.SS \-\-no\-database
+.sp
+Do not generate sqlite databases in the repository.
+.SS \-\-update
+.sp
+If metadata already exists in the outputdir and an rpm is unchanged (based on file size and mtime) since the metadata was generated, reuse the existing metadata rather than recalculating it. In the case of a large repository with only a few new or modified rpms this can significantly reduce I/O and processing time.
+.SS \-\-update\-md\-path
+.sp
+Existing metadata from this path are loaded and reused in addition to those present in the outputdir (works only with \-\-update). Can be specified multiple times.
+.SS \-\-skip\-stat
+.sp
+Skip the stat() call on a \-\-update, assumes if the filename is the same then the file is still the same (only use this if you\(aqre fairly trusting or gullible).
+.SS \-\-split
+.sp
+Run in split media mode. Rather than pass a single directory, take a set of directories corresponding to different volumes in a media set. Meta data is created in the first given directory
+.SS \-i \-\-pkglist FILENAME
+.sp
+Specify a text file which contains the complete list of files to include in the repository from the set found in the directory. File format is one package per line, no wildcards or globs.
+.SS \-n \-\-includepkg PACKAGE
+.sp
+Specify pkgs to include on the command line. Takes urls as well as local paths.
+.SS \-\-recycle\-pkglist
+.sp
+Useful only with \fB\-\-update\fR.  Read the list of packages from old metadata,
+and reuse it instead of (perhaps expensive) directory traversal.  This doesn't
+collide with explicitly selected packages by \fB\-\-pkglist\fR or
+\fB\-\-includepkg\fR, such packages are appended to the recycled list.
+This option is useful for I/O optimal repo modifications (package removal by
+\fB\-\-exclude\fR, and additions with \fB\-\-pkglist\fR).
+.SS \-o \-\-outputdir URL
+.sp
+Optional output directory.
+.SS \-S \-\-skip\-symlinks
+.sp
+Ignore symlinks of packages.
+.SS \-\-changelog\-limit NUM
+.sp
+Only import the last N changelog entries, from each rpm, into the metadata.
+.SS \-\-unique\-md\-filenames
+.sp
+Include the file\(aqs checksum in the metadata filename, helps HTTP caching (default).
+.SS \-\-simple\-md\-filenames
+.sp
+Do not include the file\(aqs checksum in the metadata filename.
+.SS \-\-retain\-old\-md NUM
+.sp
+Specify NUM to 0 to remove all repodata present in old repomd.xml or any other positive number to keep all old repodata. Use \-\-compatibility flag to get the behavior of original createrepo: Keep around the latest (by timestamp) NUM copies of the old repodata (works only for primary, filelists, other and their DB variants).
+.SS \-\-distro DISTRO
+.sp
+Distro tag and optional cpeid: \-\-distro\(aqcpeid,textname\(aq.
+.SS \-\-content CONTENT_TAGS
+.sp
+Tags for the content in the repository.
+.SS \-\-repo REPO_TAGS
+.sp
+Tags to describe the repository itself.
+.SS \-\-revision REVISION
+.sp
+User\-specified revision for this repository.
+.SS \-\-set\-timestamp\-to\-revision
+.sp
+Set timestamp fields in repomd.xml and last modification times of created repodata to a value given with \-\-revision. This requires \-\-revision to be a timestamp formatted in \(aqdate +%s\(aq format.
+.SS \-\-read\-pkgs\-list READ_PKGS_LIST
+.sp
+Output the paths to the pkgs actually read useful with \-\-update.
+.SS \-\-workers
+.sp
+Number of workers to spawn to read rpms.
+.SS \-\-xz
+.sp
+Use xz for repodata compression.
+.SS \-\-compress\-type COMPRESSION_TYPE
+.sp
+Which compression type to use.
+.SS \-\-general\-compress\-type COMPRESSION_TYPE
+.sp
+Which compression type to use (even for primary, filelists and other xml).
+.SS \-\-zck
+.sp
+Generate zchunk files as well as the standard repodata.
+.SS \-\-zck\-dict\-dir ZCK_DICT_DIR
+.sp
+Directory containing compression dictionaries for use by zchunk
+.SS \-\-keep\-all\-metadata
+.sp
+Keep all additional metadata (not primary, filelists and other xml or sqlite files, nor their compressed variants) from source repository during update (default).
+.SS \-\-discard\-additional\-metadata
+.sp
+Discard all additional metadata (not primary, filelists and other xml or sqlite files, nor their compressed variants) from source repository during update.
+.SS \-\-compatibility
+.sp
+Enforce maximal compatibility with classical createrepo (Affects only: \-\-retain\-old\-md).
+.SS \-\-retain\-old\-md\-by\-age AGE
+.sp
+During \-\-update, remove all files in repodata/ which are older then the specified period of time. (e.g. \(aq2h\(aq, \(aq30d\(aq, ...). Available units (m \- minutes, h \- hours, d \- days)
+.SS \-c \-\-cachedir CACHEDIR.
+.sp
+Set path to cache dir
+.SS \-\-deltas
+.sp
+Tells createrepo to generate deltarpms and the delta metadata.
+.SS \-\-oldpackagedirs PATH
+.sp
+Paths to look for older pkgs to delta against. Can be specified multiple times.
+.SS \-\-num\-deltas INT
+.sp
+The number of older versions to make deltas against. Defaults to 1.
+.SS \-\-max\-delta\-rpm\-size MAX_DELTA_RPM_SIZE
+.sp
+Max size of an rpm that to run deltarpm against (in bytes).
+.SS \-\-local\-sqlite
+.sp
+Gen sqlite DBs locally (into a directory for temporary files). Sometimes, sqlite has a trouble to gen DBs on a NFS mount, use this option in such cases. This option could lead to a higher memory consumption if TMPDIR is set to /tmp or not set at all, because then the /tmp is used and /tmp dir is often a ramdisk.
+.SS \-\-cut\-dirs NUM
+.sp
+Ignore NUM of directory components in location_href during repodata generation
+.SS \-\-location\-prefix PREFIX
+.sp
+Append this prefix before location_href in output repodata
+.SS \-\-repomd\-checksum CHECKSUM_TYPE
+.sp
+Checksum type to be used in repomd.xml
+.SS \-\-error\-exit\-val
+.sp
+Exit with retval 2 if there were any errors during processing
+.SS \-\-ignore\-lock
+.sp
+Expert (risky) option: Ignore an existing .repodata/. (Remove the existing .repodata/ and create an empty new one to serve as a lock for other createrepo instances. For the repodata generation, a different temporary dir with the name in format .repodata.time.microseconds.pid/ will be used). NOTE: Use this option on your own risk! If two createrepos run simultaneously, then the state of the generated metadata is not guaranteed \- it can be inconsistent and wrong.
+.\" Generated by docutils manpage writer.
+.

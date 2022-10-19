@@ -1,0 +1,2640 @@
+From 9f0762b90cc1d85900064c24fad8f7d5a8b73afe Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Ale=C5=A1=20Mat=C4=9Bj?= <amatej@redhat.com>
+Date: Wed, 9 Mar 2022 15:23:29 +0100
+Subject: [PATCH 1/5] Revert "Add xml_parse_main_metadata_together to python
+ parser examples"
+
+This reverts commit 0633e31e491179f0153ef8267874812b4691957b.
+---
+ examples/python/repodata_parsing.py | 46 -----------------------------
+ 1 file changed, 46 deletions(-)
+
+diff --git a/examples/python/repodata_parsing.py b/examples/python/repodata_parsing.py
+index 4519518..ea517a1 100755
+--- a/examples/python/repodata_parsing.py
++++ b/examples/python/repodata_parsing.py
+@@ -211,48 +211,6 @@ def second_method():
+     for pkg in packages.values():
+         print_package_info(pkg)
+ 
+-def third_method():
+-    """Parsing main metadata types (primary, filelists, other) at the same time.
+-    This approach significantly reduces memory footprint because we don't need
+-    to keep all the packages in memory, user can handle them one by one.
+-
+-    The API reflects xml_parse_primary/filelists/other except that it handles
+-    all of them at the same time.
+-
+-    """
+-    def warningcb(warning_type, message):
+-        print("PARSER WARNING: %s" % message)
+-        return True
+-
+-    repomd = cr.Repomd()
+-    cr.xml_parse_repomd(os.path.join(REPO_PATH, "repodata/repomd.xml"), repomd, warningcb)
+-
+-    primary_xml_path   = None
+-    filelists_xml_path = None
+-    other_xml_path     = None
+-    for record in repomd.records:
+-        if record.type == "primary":
+-            primary_xml_path = os.path.join(REPO_PATH, record.location_href)
+-        elif record.type == "filelists":
+-            filelists_xml_path = os.path.join(REPO_PATH, record.location_href)
+-        elif record.type == "other":
+-            other_xml_path = os.path.join(REPO_PATH, record.location_href)
+-
+-    #
+-    # Main XML metadata parsing (primary, filelists, other)
+-    #
+-
+-    def pkgcb(pkg):
+-        # Called when whole package entry from all 3 metadata xml files is parsed
+-        print_package_info(pkg)
+-
+-    cr.xml_parse_main_metadata_together(primary_xml_path,
+-                                        filelists_xml_path,
+-                                        other_xml_path,
+-                                        None,
+-                                        pkgcb,
+-                                        warningcb,
+-                                        False)
+ 
+ if __name__ == "__main__":
+     print('"All in one shot" method:')
+@@ -263,7 +221,3 @@ if __name__ == "__main__":
+     print("Callback based method:")
+     second_method()
+ 
+-    print()
+-
+-    print("Streaming callback based method:")
+-    third_method()
+-- 
+2.35.1
+
+
+From 01493aea9bc53e46a0e1020656e60ecb6c543bca Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Ale=C5=A1=20Mat=C4=9Bj?= <amatej@redhat.com>
+Date: Wed, 9 Mar 2022 15:23:40 +0100
+Subject: [PATCH 2/5] Revert "Add python tests for parsing metadata together"
+
+This reverts commit 0c050128f7e24222011cdfcc67ba58da744affa9.
+---
+ tests/python/tests/test_xml_parser.py | 206 --------------------------
+ 1 file changed, 206 deletions(-)
+
+diff --git a/tests/python/tests/test_xml_parser.py b/tests/python/tests/test_xml_parser.py
+index ed13cac..ddc089f 100644
+--- a/tests/python/tests/test_xml_parser.py
++++ b/tests/python/tests/test_xml_parser.py
+@@ -950,209 +950,3 @@ class TestCaseXmlParserRepomd(unittest.TestCase):
+         self.assertEqual(repomd.content_tags, [])
+         self.assertEqual(len(repomd.records), 3)
+ 
+-class TestCaseXmlParserMainMetadataTogether(unittest.TestCase):
+-    def test_xml_parser_main_metadata_together_repo01(self):
+-        userdata = {
+-                "pkgs": [],
+-                "pkgcb_calls": 0,
+-                "warnings": []
+-            }
+-
+-        def newpkgcb(pkgId, name, arch):
+-            pkg = cr.Package()
+-            userdata["pkgs"].append(pkg)
+-            return pkg
+-
+-        def pkgcb(pkg):
+-            userdata["pkgcb_calls"] += 1
+-
+-        def warningcb(warn_type, msg):
+-            userdata["warnings"].append((warn_type, msg))
+-
+-        cr.xml_parse_main_metadata_together(primary=REPO_01_PRIXML, filelists=REPO_01_FILXML, other=REPO_01_OTHXML,
+-                                            newpkgcb=newpkgcb, pkgcb=pkgcb, warningcb=warningcb)
+-
+-        self.assertEqual([pkg.name for pkg in userdata["pkgs"]], ['super_kernel'])
+-        self.assertEqual(userdata["pkgcb_calls"], 1)
+-        self.assertEqual(userdata["warnings"], [])
+-
+-        pkg = userdata["pkgs"][0]
+-        self.assertEqual(pkg.pkgId, "152824bff2aa6d54f429d43e87a3ff3a0286505c6d93ec87692b5e3a9e3b97bf")
+-        self.assertEqual(pkg.name, "super_kernel")
+-        self.assertEqual(pkg.arch, "x86_64")
+-        self.assertEqual(pkg.version, "6.0.1")
+-        self.assertEqual(pkg.epoch, "0")
+-        self.assertEqual(pkg.release, "2")
+-        self.assertEqual(pkg.summary, "Test package")
+-        self.assertEqual(pkg.description, "This package has provides, requires, obsoletes, conflicts options.")
+-        self.assertEqual(pkg.url, "http://so_super_kernel.com/it_is_awesome/yep_it_really_is")
+-        self.assertEqual(pkg.time_file, 1334667003)
+-        self.assertEqual(pkg.time_build, 1334667003)
+-        self.assertEqual(pkg.rpm_license, "LGPLv2")
+-        self.assertEqual(pkg.rpm_vendor, None)
+-        self.assertEqual(pkg.rpm_group, "Applications/System")
+-        self.assertEqual(pkg.rpm_buildhost, "localhost.localdomain")
+-        self.assertEqual(pkg.rpm_sourcerpm, "super_kernel-6.0.1-2.src.rpm")
+-        self.assertEqual(pkg.rpm_header_start, 280)
+-        self.assertEqual(pkg.rpm_header_end, 2637)
+-        self.assertEqual(pkg.rpm_packager, None)
+-        self.assertEqual(pkg.size_package, 2845)
+-        self.assertEqual(pkg.size_installed, 0)
+-        self.assertEqual(pkg.size_archive, 404)
+-        self.assertEqual(pkg.location_href, "super_kernel-6.0.1-2.x86_64.rpm")
+-        self.assertEqual(pkg.location_base, None)
+-        self.assertEqual(pkg.checksum_type, "sha256")
+-        self.assertEqual(pkg.requires,
+-                [('bzip2', 'GE', '0', '1.0.0', None, True),
+-                 ('expat', None, None, None, None, True),
+-                 ('glib', 'GE', '0', '2.26.0', None, False),
+-                 ('zlib', None, None, None, None, False)])
+-        self.assertEqual(pkg.provides,
+-                [('not_so_super_kernel', 'LT', '0', '5.8.0', None, False),
+-                 ('super_kernel', 'EQ', '0', '6.0.0', None, False),
+-                 ('super_kernel', 'EQ', '0', '6.0.1', '2', False),
+-                 ('super_kernel(x86-64)', 'EQ', '0', '6.0.1', '2', False)])
+-        self.assertEqual(pkg.conflicts,
+-                [('kernel', None, None, None, None, False),
+-                 ('super_kernel', 'EQ', '0', '5.0.0', None, False),
+-                 ('super_kernel', 'LT', '0', '4.0.0', None, False)])
+-        self.assertEqual(pkg.obsoletes,
+-                [('kernel', None, None, None, None, False),
+-                 ('super_kernel', 'EQ', '0', '5.9.0', None, False)])
+-        self.assertEqual(pkg.files,
+-                [(None, '/usr/bin/', 'super_kernel'),
+-                 (None, '/usr/share/man/', 'super_kernel.8.gz')])
+-        self.assertEqual(pkg.changelogs,
+-                [('Tomas Mlcoch <tmlcoch@redhat.com> - 6.0.1-1',
+-                   1334664000,
+-                  '- First release'),
+-                 ('Tomas Mlcoch <tmlcoch@redhat.com> - 6.0.1-2',
+-                   1334664001,
+-                   '- Second release')])
+-
+-    def test_xml_parser_main_metadata_together_repo02(self):
+-
+-        userdata = {
+-                "pkgs": [],
+-                "pkgcb_calls": 0,
+-                "warnings": []
+-            }
+-
+-        def newpkgcb(pkgId, name, arch):
+-            pkg = cr.Package()
+-            userdata["pkgs"].append(pkg)
+-            return pkg
+-
+-        def pkgcb(pkg):
+-            userdata["pkgcb_calls"] += 1
+-
+-        def warningcb(warn_type, msg):
+-            userdata["warnings"].append((warn_type, msg))
+-
+-        cr.xml_parse_main_metadata_together(REPO_02_PRIXML, REPO_02_FILXML, REPO_02_OTHXML, newpkgcb, pkgcb, warningcb,
+-                                            allow_out_of_order=True)
+-
+-        self.assertEqual([pkg.name for pkg in userdata["pkgs"]],
+-            ['fake_bash', 'super_kernel'])
+-        self.assertEqual(userdata["pkgcb_calls"], 2)
+-        self.assertEqual(userdata["warnings"], [])
+-
+-    def test_xml_parser_main_metadata_together_repo02_only_pkgcb(self):
+-
+-        pkgs = []
+-
+-        def pkgcb(pkg):
+-            pkgs.append(pkg)
+-
+-        cr.xml_parse_main_metadata_together(REPO_02_PRIXML, REPO_02_FILXML, REPO_02_OTHXML,
+-                                            None, pkgcb, None)
+-
+-        self.assertEqual([pkg.name for pkg in pkgs],
+-            ['fake_bash', 'super_kernel'])
+-
+-    def test_xml_parser_main_metadata_together_repo02_no_cbs(self):
+-        self.assertRaises(ValueError,
+-                          cr.xml_parse_main_metadata_together,
+-                          REPO_02_PRIXML, REPO_02_FILXML, REPO_02_OTHXML,
+-                          None, None, None)
+-
+-    def test_xml_parser_main_metadata_together_warnings(self):
+-        userdata = {
+-                "pkgs": [],
+-                "warnings": []
+-            }
+-
+-        def newpkgcb(pkgId, name, arch):
+-            pkg = cr.Package()
+-            userdata["pkgs"].append(pkg)
+-            return pkg
+-
+-        def warningcb(warn_type, msg):
+-            userdata["warnings"].append((warn_type, msg))
+-
+-        cr.xml_parse_main_metadata_together(PRIMARY_MULTI_WARN_00_PATH,
+-                                            FILELISTS_MULTI_WARN_00_PATH,
+-                                            OTHER_MULTI_WARN_00_PATH,
+-                                            newpkgcb, None, warningcb)
+-
+-        self.assertEqual([pkg.name for pkg in userdata["pkgs"]],
+-            ['fake_bash', 'super_kernel'])
+-        self.assertEqual(userdata["warnings"],
+-            [(0, 'Unknown element "fooelement"'),
+-             (1, 'Missing attribute "type" of a package element'),
+-             (0, 'Unknown element "foo"'),
+-             (3, 'Conversion of "foobar" to integer failed'),
+-             (0, 'Unknown element "bar"'),
+-             (1, 'Missing attribute "arch" of a package element'),
+-             (2, 'Unknown file type "xxx"'),
+-             (0, 'Unknown element "bar"'),
+-             (1, 'Missing attribute "name" of a package element'),
+-             (0, 'Unknown element "bar"'),
+-             (3, 'Conversion of "xxx" to integer failed')])
+-
+-
+-    def test_xml_parser_main_metadata_together_error(self):
+-        userdata = { "pkgs": [] }
+-
+-        def newpkgcb(pkgId, name, arch):
+-            pkg = cr.Package()
+-            userdata["pkgs"].append(pkg)
+-            return pkg
+-
+-        self.assertRaises(cr.CreaterepoCError, cr.xml_parse_main_metadata_together,
+-                          PRIMARY_ERROR_00_PATH, FILELISTS_ERROR_00_PATH,
+-                          OTHER_ERROR_00_PATH, newpkgcb, None, None)
+-
+-        # unlike parsing just primary, filelists or other separately when parsing together primary is parsed first fully
+-        # before newpkgcb is called so the error is detected before any user package is created
+-        self.assertEqual(len(userdata["pkgs"]), 0)
+-
+-    def test_xml_parser_main_metadata_together_newpkgcb_abort(self):
+-        def newpkgcb(pkgId, name, arch):
+-            raise Error("Foo error")
+-        self.assertRaises(cr.CreaterepoCError,
+-                          cr.xml_parse_main_metadata_together,
+-                          REPO_02_PRIXML, REPO_02_FILXML, REPO_02_OTHXML,
+-                          newpkgcb, None, None)
+-
+-    def test_xml_parser_main_metadata_together_pkgcb_abort(self):
+-       def newpkgcb(pkgId, name, arch):
+-           return cr.Package()
+-       def pkgcb(pkg):
+-           raise Error("Foo error")
+-       self.assertRaises(cr.CreaterepoCError,
+-                         cr.xml_parse_main_metadata_together,
+-                         REPO_02_PRIXML, REPO_02_FILXML, REPO_02_OTHXML,
+-                         newpkgcb, pkgcb, None)
+-
+-    def test_xml_parser_main_metadata_together_warningcb_abort(self):
+-        def newpkgcb(pkgId, name, arch):
+-            return cr.Package()
+-        def warningcb(type, msg):
+-            raise Error("Foo error")
+-        self.assertRaises(cr.CreaterepoCError,
+-                          cr.xml_parse_main_metadata_together,
+-                          PRIMARY_MULTI_WARN_00_PATH,
+-                          FILELISTS_MULTI_WARN_00_PATH,
+-                          OTHER_MULTI_WARN_00_PATH,
+-                          newpkgcb, None, warningcb)
+-- 
+2.35.1
+
+
+From 9210f5d725a71f130bf5fb880f386c2e8e5f66fa Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Ale=C5=A1=20Mat=C4=9Bj?= <amatej@redhat.com>
+Date: Wed, 9 Mar 2022 15:23:47 +0100
+Subject: [PATCH 3/5] Revert "Wrap c api to python for parsing metadata
+ together"
+
+This reverts commit 670006b9f37d8298fe2ec1d6cfc5cdf175a3128b.
+---
+ src/python/createrepo_cmodule.c |   2 -
+ src/python/xml_parser-py.c      | 156 +++++++-------------------------
+ src/python/xml_parser-py.h      |   8 --
+ 3 files changed, 32 insertions(+), 134 deletions(-)
+
+diff --git a/src/python/createrepo_cmodule.c b/src/python/createrepo_cmodule.c
+index c0b9200..6937246 100644
+--- a/src/python/createrepo_cmodule.c
++++ b/src/python/createrepo_cmodule.c
+@@ -79,8 +79,6 @@ static struct PyMethodDef createrepo_c_methods[] = {
+         METH_VARARGS, xml_parse_repomd__doc__},
+     {"xml_parse_updateinfo",    (PyCFunction)py_xml_parse_updateinfo,
+         METH_VARARGS, xml_parse_updateinfo__doc__},
+-    {"xml_parse_main_metadata_together",(PyCFunctionWithKeywords)py_xml_parse_main_metadata_together,
+-        METH_VARARGS | METH_KEYWORDS, xml_parse_main_metadata_together__doc__},
+     {"checksum_name_str",       (PyCFunction)py_checksum_name_str,
+         METH_VARARGS, checksum_name_str__doc__},
+     {"checksum_type",           (PyCFunction)py_checksum_type,
+diff --git a/src/python/xml_parser-py.c b/src/python/xml_parser-py.c
+index a1f92f8..0879128 100644
+--- a/src/python/xml_parser-py.c
++++ b/src/python/xml_parser-py.c
+@@ -34,7 +34,7 @@ typedef struct {
+     PyObject *py_newpkgcb;
+     PyObject *py_pkgcb;
+     PyObject *py_warningcb;
+-    PyObject *py_pkgs;       /*!< Current processed package */
++    PyObject *py_pkg;       /*!< Current processed package */
+ } CbData;
+ 
+ static int
+@@ -48,6 +48,12 @@ c_newpkgcb(cr_Package **pkg,
+     PyObject *arglist, *result;
+     CbData *data = cbdata;
+ 
++    if (data->py_pkg) {
++        // Decref ref count on previous processed package
++        Py_DECREF(data->py_pkg);
++        data->py_pkg = NULL;
++    }
++
+     arglist = Py_BuildValue("(sss)", pkgId, name, arch);
+     result = PyObject_CallObject(data->py_newpkgcb, arglist);
+     Py_DECREF(arglist);
+@@ -67,18 +73,13 @@ c_newpkgcb(cr_Package **pkg,
+ 
+     if (result == Py_None) {
+         *pkg = NULL;
++        data->py_pkg = NULL;
++        Py_DECREF(result);
+     } else {
+         *pkg = Package_FromPyObject(result);
+-        if (data->py_pkgcb != Py_None) {
+-            // Store reference to the python pkg (result) only if we will need it later
+-            PyObject *keyFromPtr = PyLong_FromVoidPtr(*pkg);
+-            PyDict_SetItem(data->py_pkgs, keyFromPtr, result);
+-            Py_DECREF(keyFromPtr);
+-        }
++        data->py_pkg = result; // Store reference to current package
+     }
+ 
+-    Py_DECREF(result);
+-
+     return CR_CB_RET_OK;
+ }
+ 
+@@ -90,23 +91,16 @@ c_pkgcb(cr_Package *pkg,
+     PyObject *arglist, *result, *py_pkg;
+     CbData *data = cbdata;
+ 
+-    PyObject *keyFromPtr = PyLong_FromVoidPtr(pkg);
+-    py_pkg = PyDict_GetItem(data->py_pkgs, keyFromPtr);
+-    if (py_pkg) {
+-        arglist = Py_BuildValue("(O)", py_pkg);
+-        result = PyObject_CallObject(data->py_pkgcb, arglist);
+-        PyDict_DelItem(data->py_pkgs, keyFromPtr);
+-    } else {
+-        // The package was not provided by user in c_newpkgcb,
+-        // create new python package object
+-        PyObject *new_py_pkg = Object_FromPackage(pkg, 1);
+-        arglist = Py_BuildValue("(O)", new_py_pkg);
+-        result = PyObject_CallObject(data->py_pkgcb, arglist);
+-        Py_DECREF(new_py_pkg);
+-    }
++    if (data->py_pkg)
++        py_pkg = data->py_pkg;
++    else
++        py_pkg = Object_FromPackage(pkg, 1);
+ 
++    arglist = Py_BuildValue("(O)", py_pkg);
++    result = PyObject_CallObject(data->py_pkgcb, arglist);
+     Py_DECREF(arglist);
+-    Py_DECREF(keyFromPtr);
++    Py_DECREF(py_pkg);
++    data->py_pkg = NULL;
+ 
+     if (result == NULL) {
+         // Exception raised
+@@ -197,7 +191,7 @@ py_xml_parse_primary(G_GNUC_UNUSED PyObject *self, PyObject *args)
+     cbdata.py_newpkgcb  = py_newpkgcb;
+     cbdata.py_pkgcb     = py_pkgcb;
+     cbdata.py_warningcb = py_warningcb;
+-    cbdata.py_pkgs      = PyDict_New();
++    cbdata.py_pkg       = NULL;
+ 
+     cr_xml_parse_primary(filename,
+                          ptr_c_newpkgcb,
+@@ -212,8 +206,7 @@ py_xml_parse_primary(G_GNUC_UNUSED PyObject *self, PyObject *args)
+     Py_XDECREF(py_newpkgcb);
+     Py_XDECREF(py_pkgcb);
+     Py_XDECREF(py_warningcb);
+-
+-    Py_XDECREF(cbdata.py_pkgs);
++    Py_XDECREF(cbdata.py_pkg);
+ 
+     if (tmp_err) {
+         nice_exception(&tmp_err, NULL);
+@@ -279,7 +272,7 @@ py_xml_parse_primary_snippet(G_GNUC_UNUSED PyObject *self, PyObject *args)
+     cbdata.py_newpkgcb  = py_newpkgcb;
+     cbdata.py_pkgcb     = py_pkgcb;
+     cbdata.py_warningcb = py_warningcb;
+-    cbdata.py_pkgs      = PyDict_New();
++    cbdata.py_pkg       = NULL;
+ 
+     cr_xml_parse_primary_snippet(target, ptr_c_newpkgcb, &cbdata, ptr_c_pkgcb, &cbdata,
+                                  ptr_c_warningcb, &cbdata, do_files, &tmp_err);
+@@ -287,7 +280,7 @@ py_xml_parse_primary_snippet(G_GNUC_UNUSED PyObject *self, PyObject *args)
+     Py_XDECREF(py_newpkgcb);
+     Py_XDECREF(py_pkgcb);
+     Py_XDECREF(py_warningcb);
+-    Py_XDECREF(cbdata.py_pkgs);
++    Py_XDECREF(cbdata.py_pkg);
+ 
+     if (tmp_err) {
+         nice_exception(&tmp_err, NULL);
+@@ -351,7 +344,7 @@ py_xml_parse_filelists(G_GNUC_UNUSED PyObject *self, PyObject *args)
+     cbdata.py_newpkgcb  = py_newpkgcb;
+     cbdata.py_pkgcb     = py_pkgcb;
+     cbdata.py_warningcb = py_warningcb;
+-    cbdata.py_pkgs      = PyDict_New();
++    cbdata.py_pkg       = NULL;
+ 
+     cr_xml_parse_filelists(filename,
+                            ptr_c_newpkgcb,
+@@ -365,7 +358,7 @@ py_xml_parse_filelists(G_GNUC_UNUSED PyObject *self, PyObject *args)
+     Py_XDECREF(py_newpkgcb);
+     Py_XDECREF(py_pkgcb);
+     Py_XDECREF(py_warningcb);
+-    Py_XDECREF(cbdata.py_pkgs);
++    Py_XDECREF(cbdata.py_pkg);
+ 
+     if (tmp_err) {
+         nice_exception(&tmp_err, NULL);
+@@ -429,7 +422,7 @@ py_xml_parse_filelists_snippet(G_GNUC_UNUSED PyObject *self, PyObject *args)
+     cbdata.py_newpkgcb  = py_newpkgcb;
+     cbdata.py_pkgcb     = py_pkgcb;
+     cbdata.py_warningcb = py_warningcb;
+-    cbdata.py_pkgs      = PyDict_New();
++    cbdata.py_pkg       = NULL;
+ 
+     cr_xml_parse_filelists_snippet(target, ptr_c_newpkgcb, &cbdata, ptr_c_pkgcb,
+                                    &cbdata, ptr_c_warningcb, &cbdata, &tmp_err);
+@@ -437,7 +430,7 @@ py_xml_parse_filelists_snippet(G_GNUC_UNUSED PyObject *self, PyObject *args)
+     Py_XDECREF(py_newpkgcb);
+     Py_XDECREF(py_pkgcb);
+     Py_XDECREF(py_warningcb);
+-    Py_XDECREF(cbdata.py_pkgs);
++    Py_XDECREF(cbdata.py_pkg);
+ 
+     if (tmp_err) {
+         nice_exception(&tmp_err, NULL);
+@@ -501,7 +494,7 @@ py_xml_parse_other(G_GNUC_UNUSED PyObject *self, PyObject *args)
+     cbdata.py_newpkgcb  = py_newpkgcb;
+     cbdata.py_pkgcb     = py_pkgcb;
+     cbdata.py_warningcb = py_warningcb;
+-    cbdata.py_pkgs      = PyDict_New();
++    cbdata.py_pkg       = NULL;
+ 
+     cr_xml_parse_other(filename,
+                        ptr_c_newpkgcb,
+@@ -515,7 +508,7 @@ py_xml_parse_other(G_GNUC_UNUSED PyObject *self, PyObject *args)
+     Py_XDECREF(py_newpkgcb);
+     Py_XDECREF(py_pkgcb);
+     Py_XDECREF(py_warningcb);
+-    Py_XDECREF(cbdata.py_pkgs);
++    Py_XDECREF(cbdata.py_pkg);
+ 
+     if (tmp_err) {
+         nice_exception(&tmp_err, NULL);
+@@ -579,7 +572,7 @@ py_xml_parse_other_snippet(G_GNUC_UNUSED PyObject *self, PyObject *args)
+     cbdata.py_newpkgcb  = py_newpkgcb;
+     cbdata.py_pkgcb     = py_pkgcb;
+     cbdata.py_warningcb = py_warningcb;
+-    cbdata.py_pkgs      = PyDict_New();
++    cbdata.py_pkg       = NULL;
+ 
+     cr_xml_parse_other_snippet(target, ptr_c_newpkgcb, &cbdata, ptr_c_pkgcb, &cbdata,
+                                ptr_c_warningcb, &cbdata, &tmp_err);
+@@ -587,7 +580,7 @@ py_xml_parse_other_snippet(G_GNUC_UNUSED PyObject *self, PyObject *args)
+     Py_XDECREF(py_newpkgcb);
+     Py_XDECREF(py_pkgcb);
+     Py_XDECREF(py_warningcb);
+-    Py_XDECREF(cbdata.py_pkgs);
++    Py_XDECREF(cbdata.py_pkg);
+ 
+     if (tmp_err) {
+         nice_exception(&tmp_err, NULL);
+@@ -630,7 +623,7 @@ py_xml_parse_repomd(G_GNUC_UNUSED PyObject *self, PyObject *args)
+     cbdata.py_newpkgcb  = NULL;
+     cbdata.py_pkgcb     = NULL;
+     cbdata.py_warningcb = py_warningcb;
+-    cbdata.py_pkgs      = NULL;
++    cbdata.py_pkg       = NULL;
+ 
+     repomd = Repomd_FromPyObject(py_repomd);
+ 
+@@ -684,7 +677,7 @@ py_xml_parse_updateinfo(G_GNUC_UNUSED PyObject *self, PyObject *args)
+     cbdata.py_newpkgcb  = NULL;
+     cbdata.py_pkgcb     = NULL;
+     cbdata.py_warningcb = py_warningcb;
+-    cbdata.py_pkgs      = NULL;
++    cbdata.py_pkg       = NULL;
+ 
+     updateinfo = UpdateInfo_FromPyObject(py_updateinfo);
+ 
+@@ -704,88 +697,3 @@ py_xml_parse_updateinfo(G_GNUC_UNUSED PyObject *self, PyObject *args)
+ 
+     Py_RETURN_NONE;
+ }
+-
+-
+-PyObject *
+-py_xml_parse_main_metadata_together(G_GNUC_UNUSED PyObject *self, PyObject *args, PyObject *kwargs)
+-{
+-    char *primary_filename;
+-    char *filelists_filename;
+-    char *other_filename;
+-    int allow_out_of_order = 1;
+-    PyObject *py_newpkgcb, *py_pkgcb, *py_warningcb;
+-    CbData cbdata;
+-    GError *tmp_err = NULL;
+-    static char *kwlist[] = { "primary", "filelists", "other", "newpkgcb", "pkgcb",
+-                              "warningcb", "allow_out_of_order", NULL };
+-
+-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "sssOOO|p:py_xml_parse_main_metadata_together", kwlist,
+-                                     &primary_filename, &filelists_filename, &other_filename, &py_newpkgcb,
+-                                     &py_pkgcb, &py_warningcb, &allow_out_of_order)) {
+-        return NULL;
+-    }
+-
+-    if (!PyCallable_Check(py_newpkgcb) && py_newpkgcb != Py_None) {
+-        PyErr_SetString(PyExc_TypeError, "newpkgcb must be callable or None");
+-        return NULL;
+-    }
+-
+-    if (!PyCallable_Check(py_pkgcb) && py_pkgcb != Py_None) {
+-        PyErr_SetString(PyExc_TypeError, "pkgcb must be callable or None");
+-        return NULL;
+-    }
+-
+-    if (!PyCallable_Check(py_warningcb) && py_warningcb != Py_None) {
+-        PyErr_SetString(PyExc_TypeError, "warningcb must be callable or None");
+-        return NULL;
+-    }
+-
+-    if (py_newpkgcb == Py_None && py_pkgcb == Py_None) {
+-        PyErr_SetString(PyExc_ValueError, "both pkgcb and newpkgcb cannot be None");
+-        return NULL;
+-    }
+-
+-    Py_XINCREF(py_newpkgcb);
+-    Py_XINCREF(py_pkgcb);
+-    Py_XINCREF(py_warningcb);
+-
+-    cr_XmlParserNewPkgCb    ptr_c_newpkgcb  = NULL;
+-    cr_XmlParserPkgCb       ptr_c_pkgcb     = NULL;
+-    cr_XmlParserWarningCb   ptr_c_warningcb = NULL;
+-
+-    if (py_newpkgcb != Py_None)
+-        ptr_c_newpkgcb = c_newpkgcb;
+-    if (py_pkgcb != Py_None)
+-        ptr_c_pkgcb = c_pkgcb;
+-    if (py_warningcb != Py_None)
+-        ptr_c_warningcb = c_warningcb;
+-
+-    cbdata.py_newpkgcb  = py_newpkgcb;
+-    cbdata.py_pkgcb     = py_pkgcb;
+-    cbdata.py_warningcb = py_warningcb;
+-    cbdata.py_pkgs      = PyDict_New();
+-
+-    cr_xml_parse_main_metadata_together(primary_filename,
+-                                        filelists_filename,
+-                                        other_filename,
+-                                        ptr_c_newpkgcb,
+-                                        &cbdata,
+-                                        ptr_c_pkgcb,
+-                                        &cbdata,
+-                                        ptr_c_warningcb,
+-                                        &cbdata,
+-                                        allow_out_of_order,
+-                                        &tmp_err);
+-
+-    Py_XDECREF(py_newpkgcb);
+-    Py_XDECREF(py_pkgcb);
+-    Py_XDECREF(py_warningcb);
+-    Py_XDECREF(cbdata.py_pkgs);
+-
+-    if (tmp_err) {
+-        nice_exception(&tmp_err, NULL);
+-        return NULL;
+-    }
+-
+-    Py_RETURN_NONE;
+-}
+diff --git a/src/python/xml_parser-py.h b/src/python/xml_parser-py.h
+index 3260005..e5eea9f 100644
+--- a/src/python/xml_parser-py.h
++++ b/src/python/xml_parser-py.h
+@@ -64,12 +64,4 @@ PyDoc_STRVAR(xml_parse_updateinfo__doc__,
+ 
+ PyObject *py_xml_parse_updateinfo(PyObject *self, PyObject *args);
+ 
+-PyDoc_STRVAR(xml_parse_main_metadata_together__doc__,
+-"xml_parse_main_metadata_together(primary_filename, filelists_filename, other_filename, newpkgcb, pkgcb, warningcb) -> None\n\n"
+-"Parse primary.xml, filelists.xml and other.xml together at the same time."
+-"- It can handle if packages are not in the same order in all 3 files but memory requirements grow."
+-"- It is not guaranteed that newpkgcb is always followed by pkgcb for the given package, it is possible newpkgcb will be called several times for different packages and only after that pkgcbs will be called.");
+-
+-PyObject *py_xml_parse_main_metadata_together(PyObject *self, PyObject *args, PyObject *kwargs);
+-
+ #endif
+-- 
+2.35.1
+
+
+From ac6f56e87f8a4b1f0a35d9dedc02a8846c9a6390 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Ale=C5=A1=20Mat=C4=9Bj?= <amatej@redhat.com>
+Date: Wed, 9 Mar 2022 15:23:58 +0100
+Subject: [PATCH 4/5] Revert "Add c tests for parsing metadata together"
+
+This reverts commit 3ef3d4d77e283ee916fc7977cdc3855b912463e0.
+---
+ tests/CMakeLists.txt                          |    4 -
+ tests/fixtures.h                              |    2 -
+ .../test_xml_parser_main_metadata_together.c  |  298 -----
+ .../modified_repo_files/long_primary.xml      | 1060 -----------------
+ .../repo_02_different_order_filelists.xml     |   16 -
+ 5 files changed, 1380 deletions(-)
+ delete mode 100644 tests/test_xml_parser_main_metadata_together.c
+ delete mode 100644 tests/testdata/modified_repo_files/long_primary.xml
+ delete mode 100644 tests/testdata/modified_repo_files/repo_02_different_order_filelists.xml
+
+diff --git a/tests/CMakeLists.txt b/tests/CMakeLists.txt
+index 4ffe837..3936176 100644
+--- a/tests/CMakeLists.txt
++++ b/tests/CMakeLists.txt
+@@ -38,10 +38,6 @@ ADD_EXECUTABLE(test_xml_parser_updateinfo test_xml_parser_updateinfo.c)
+ TARGET_LINK_LIBRARIES(test_xml_parser_updateinfo libcreaterepo_c ${GLIB2_LIBRARIES})
+ ADD_DEPENDENCIES(tests test_xml_parser_updateinfo)
+ 
+-ADD_EXECUTABLE(test_xml_parser_main_metadata_together test_xml_parser_main_metadata_together.c)
+-TARGET_LINK_LIBRARIES(test_xml_parser_main_metadata_together libcreaterepo_c ${GLIB2_LIBRARIES})
+-ADD_DEPENDENCIES(tests test_xml_parser_main_metadata_together)
+-
+ ADD_EXECUTABLE(test_xml_dump test_xml_dump.c)
+ TARGET_LINK_LIBRARIES(test_xml_dump libcreaterepo_c ${GLIB2_LIBRARIES})
+ ADD_DEPENDENCIES(tests test_xml_dump)
+diff --git a/tests/fixtures.h b/tests/fixtures.h
+index 676518c..a47dd66 100644
+--- a/tests/fixtures.h
++++ b/tests/fixtures.h
+@@ -85,8 +85,6 @@
+ #define TEST_MRF_UE_OTH_00      TEST_MODIFIED_REPO_FILES_PATH"unknown_element_00-other.xml"
+ #define TEST_MRF_UE_OTH_01      TEST_MODIFIED_REPO_FILES_PATH"unknown_element_01-other.xml"
+ #define TEST_MRF_UE_OTH_02      TEST_MODIFIED_REPO_FILES_PATH"unknown_element_02-other.xml"
+-#define TEST_LONG_PRIMARY       TEST_MODIFIED_REPO_FILES_PATH"long_primary.xml"
+-#define TEST_DIFF_ORDER_FILELISTS TEST_MODIFIED_REPO_FILES_PATH"repo_02_different_order_filelists.xml"
+ 
+ // Test files
+ 
+diff --git a/tests/test_xml_parser_main_metadata_together.c b/tests/test_xml_parser_main_metadata_together.c
+deleted file mode 100644
+index a4e4ad7..0000000
+--- a/tests/test_xml_parser_main_metadata_together.c
++++ /dev/null
+@@ -1,298 +0,0 @@
+-/*
+- * Copyright (C) 2021 Red Hat, Inc.
+- *
+- * Licensed under the GNU Lesser General Public License Version 2.1
+- *
+- * This library is free software; you can redistribute it and/or
+- * modify it under the terms of the GNU Lesser General Public
+- * License as published by the Free Software Foundation; either
+- * version 2.1 of the License, or (at your option) any later version.
+- *
+- * This library is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+- * Lesser General Public License for more details.
+- *
+- * You should have received a copy of the GNU Lesser General Public
+- * License along with this library; if not, write to the Free Software
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+- */
+-
+-#include <glib.h>
+-#include <stdlib.h>
+-#include <stdio.h>
+-#include "fixtures.h"
+-#include "createrepo/error.h"
+-#include "createrepo/package.h"
+-#include "createrepo/misc.h"
+-#include "createrepo/xml_parser.h"
+-#include "createrepo/xml_parser_internal.h"
+-
+-// Callbacks
+-
+-static int
+-pkgcb(cr_Package *pkg, void *cbdata, GError **err)
+-{
+-    g_assert(pkg);
+-    g_assert(!err || *err == NULL);
+-    if (cbdata) *((int *)cbdata) += 1;
+-    cr_package_free(pkg);
+-    return CR_CB_RET_OK;
+-}
+-
+-static int
+-pkgcb_interrupt(cr_Package *pkg, void *cbdata, GError **err)
+-{
+-    g_assert(pkg);
+-    g_assert(!err || *err == NULL);
+-    if (cbdata) *((int *)cbdata) += 1;
+-    cr_package_free(pkg);
+-    return CR_CB_RET_ERR;
+-}
+-
+-static int
+-newpkgcb_skip_fake_bash(cr_Package **pkg,
+-                        G_GNUC_UNUSED const char *pkgId,
+-                        const char *name,
+-                        G_GNUC_UNUSED const char *arch,
+-                        G_GNUC_UNUSED void *cbdata,
+-                        GError **err)
+-{
+-    g_assert(pkg != NULL);
+-    g_assert(*pkg == NULL);
+-    g_assert(pkgId != NULL);
+-    g_assert(!err || *err == NULL);
+-
+-
+-    if (!g_strcmp0(name, "fake_bash")) {
+-        return CRE_OK;
+-    }
+-
+-    *pkg = cr_package_new();
+-    return CR_CB_RET_OK;
+-}
+-
+-static int
+-newpkgcb_interrupt(cr_Package **pkg,
+-                   G_GNUC_UNUSED const char *pkgId,
+-                   G_GNUC_UNUSED const char *name,
+-                   G_GNUC_UNUSED const char *arch,
+-                   G_GNUC_UNUSED void *cbdata,
+-                   GError **err)
+-{
+-    g_assert(pkg != NULL);
+-    g_assert(*pkg == NULL);
+-    g_assert(pkgId != NULL);
+-    g_assert(!err || *err == NULL);
+-
+-    if (cbdata) *((int *)cbdata) += 1;
+-
+-    return CR_CB_RET_ERR;
+-}
+-
+-static int
+-warningcb(G_GNUC_UNUSED cr_XmlParserWarningType type,
+-          G_GNUC_UNUSED char *msg,
+-          void *cbdata,
+-          G_GNUC_UNUSED GError **err)
+-{
+-    g_assert(type < CR_XML_WARNING_SENTINEL);
+-    g_assert(!err || *err == NULL);
+-
+-    g_string_append((GString *) cbdata, msg);
+-    g_string_append((GString *) cbdata, ";");
+-
+-    return CR_CB_RET_OK;
+-}
+-
+-static int
+-warningcb_interrupt(G_GNUC_UNUSED cr_XmlParserWarningType type,
+-                    G_GNUC_UNUSED char *msg,
+-                    G_GNUC_UNUSED void *cbdata,
+-                    G_GNUC_UNUSED GError **err)
+-{
+-    g_assert(type < CR_XML_WARNING_SENTINEL);
+-    g_assert(!err || *err == NULL);
+-
+-    if (cbdata) *((int *)cbdata) += 1;
+-
+-    return CR_CB_RET_ERR;
+-}
+-
+-// Tests
+-
+-static void
+-test_cr_xml_parse_main_metadata_together_00(void)
+-{
+-    int parsed = 0;
+-    GError *tmp_err = NULL;
+-    int ret = cr_xml_parse_main_metadata_together(TEST_REPO_02_PRIMARY, TEST_REPO_02_FILELISTS, TEST_REPO_02_OTHER,
+-                                                  NULL, NULL, pkgcb, &parsed, NULL, NULL, TRUE, &tmp_err);
+-    g_assert(tmp_err == NULL);
+-    g_assert_cmpint(ret, ==, CRE_OK);
+-    g_assert_cmpint(parsed, ==, 2);
+-}
+-
+-static void
+-test_cr_xml_parse_main_metadata_together_01_out_of_order_pkgs(void)
+-{
+-    int parsed = 0;
+-    GError *tmp_err = NULL;
+-    int ret = cr_xml_parse_main_metadata_together(TEST_REPO_02_PRIMARY,
+-                                                  TEST_DIFF_ORDER_FILELISTS,
+-                                                  TEST_REPO_02_OTHER,
+-                                                  NULL, NULL, pkgcb, &parsed, NULL, NULL, FALSE, &tmp_err);
+-    g_assert(tmp_err != NULL);
+-    g_assert_cmpint(ret, ==, CRE_XMLPARSER);
+-
+-    g_clear_error(&tmp_err);
+-    ret = cr_xml_parse_main_metadata_together(TEST_REPO_02_PRIMARY, TEST_DIFF_ORDER_FILELISTS, TEST_REPO_02_OTHER,
+-                                              NULL, NULL, pkgcb, &parsed, NULL, NULL, TRUE, &tmp_err);
+-    g_assert(tmp_err == NULL);
+-    g_assert_cmpint(ret, ==, CRE_OK);
+-    g_assert_cmpint(parsed, ==, 2);
+-}
+-
+-static void
+-test_cr_xml_parse_main_metadata_together_02_invalid_path(void)
+-{
+-    int parsed = 0;
+-    GError *tmp_err = NULL;
+-    int ret = cr_xml_parse_main_metadata_together("/non/existent/file", TEST_REPO_02_FILELISTS, TEST_REPO_02_OTHER,
+-                                                  NULL, NULL, pkgcb, &parsed, NULL, NULL, TRUE, &tmp_err);
+-    g_assert(tmp_err != NULL);
+-    g_assert_cmpint(ret, ==, CRE_NOFILE);
+-}
+-
+-static void
+-test_cr_xml_parse_main_metadata_together_03_newpkgcb_returns_null(void)
+-{
+-    int parsed = 0;
+-    GError *tmp_err = NULL;
+-    int ret = cr_xml_parse_main_metadata_together(TEST_REPO_02_PRIMARY, TEST_REPO_02_FILELISTS, TEST_REPO_02_OTHER,
+-                                                  newpkgcb_skip_fake_bash, NULL, pkgcb, &parsed, NULL, NULL, TRUE,
+-                                                  &tmp_err);
+-    g_assert(tmp_err == NULL);
+-    g_assert_cmpint(ret, ==, CRE_OK);
+-    g_assert_cmpint(parsed, ==, 1);
+-
+-    parsed = 0;
+-    ret = cr_xml_parse_main_metadata_together(TEST_REPO_02_PRIMARY, TEST_DIFF_ORDER_FILELISTS, TEST_REPO_02_OTHER,
+-                                              newpkgcb_skip_fake_bash, NULL, pkgcb, &parsed, NULL, NULL, TRUE,
+-                                              &tmp_err);
+-    g_assert(tmp_err == NULL);
+-    g_assert_cmpint(ret, ==, CRE_OK);
+-    g_assert_cmpint(parsed, ==, 1);
+-
+-    parsed = 0;
+-    ret = cr_xml_parse_main_metadata_together(TEST_REPO_02_PRIMARY, TEST_DIFF_ORDER_FILELISTS, TEST_REPO_02_OTHER,
+-                                              newpkgcb_skip_fake_bash, NULL, pkgcb, &parsed, NULL, NULL, FALSE,
+-                                              &tmp_err);
+-    g_assert(tmp_err == NULL);
+-    g_assert_cmpint(ret, ==, CRE_OK);
+-    g_assert_cmpint(parsed, ==, 1);
+-}
+-
+-static void
+-test_cr_xml_parse_main_metadata_together_04_newpkgcb_interrupt(void)
+-{
+-    int parsed = 0;
+-    GError *tmp_err = NULL;
+-    int ret = cr_xml_parse_main_metadata_together(TEST_REPO_02_PRIMARY, TEST_REPO_02_FILELISTS, TEST_REPO_02_OTHER,
+-                                                  newpkgcb_interrupt, &parsed, NULL, NULL, NULL, NULL, TRUE, &tmp_err);
+-    g_assert(tmp_err != NULL);
+-    g_error_free(tmp_err);
+-    g_assert_cmpint(ret, ==, CRE_CBINTERRUPTED);
+-    g_assert_cmpint(parsed, ==, 1);
+-}
+-
+-static void
+-test_cr_xml_parse_main_metadata_together_05_pkgcb_interrupt(void)
+-{
+-    int parsed = 0;
+-    GError *tmp_err = NULL;
+-    int ret = cr_xml_parse_main_metadata_together(TEST_REPO_02_PRIMARY, TEST_REPO_02_FILELISTS, TEST_REPO_02_OTHER,
+-                                                  NULL, NULL, pkgcb_interrupt, &parsed, NULL, NULL, TRUE, &tmp_err);
+-    g_assert(tmp_err != NULL);
+-    g_error_free(tmp_err);
+-    g_assert_cmpint(ret, ==, CRE_CBINTERRUPTED);
+-    g_assert_cmpint(parsed, ==, 1);
+-}
+-
+-static void
+-test_cr_xml_parse_main_metadata_together_06_warnings_bad_file_type(void)
+-{
+-    int parsed = 0;
+-    char *warnmsgs;
+-    GError *tmp_err = NULL;
+-    GString *warn_strings = g_string_new(0);
+-    int ret = cr_xml_parse_main_metadata_together(TEST_REPO_02_PRIMARY, TEST_MRF_BAD_TYPE_FIL, TEST_REPO_02_OTHER,
+-                                                  NULL, NULL, pkgcb, &parsed, warningcb, warn_strings, TRUE, &tmp_err);
+-    g_assert(tmp_err == NULL);
+-    g_assert_cmpint(ret, ==, CRE_OK);
+-    g_assert_cmpint(parsed, ==, 2);
+-    warnmsgs = g_string_free(warn_strings, FALSE);
+-    g_assert_cmpstr(warnmsgs, ==, "Unknown file type \"foo\";");
+-    g_free(warnmsgs);
+-}
+-
+-static void
+-test_cr_xml_parse_main_metadata_together_07_warningcb_interrupt(void)
+-{
+-    int numofwarnings = 0;
+-    GError *tmp_err = NULL;
+-    int ret = cr_xml_parse_main_metadata_together(TEST_REPO_02_PRIMARY, TEST_MRF_BAD_TYPE_FIL, TEST_REPO_02_OTHER,
+-                                                  NULL, NULL, pkgcb, NULL, warningcb_interrupt, &numofwarnings,
+-                                                  TRUE, &tmp_err);
+-    g_assert(tmp_err != NULL);
+-    g_error_free(tmp_err);
+-    g_assert_cmpint(ret, ==, CRE_CBINTERRUPTED);
+-    g_assert_cmpint(numofwarnings, ==, 1);
+-}
+-
+-static void
+-test_cr_xml_parse_main_metadata_together_08_long_primary(void)
+-{
+-    int parsed = 0;
+-    GError *tmp_err = NULL;
+-    int ret = cr_xml_parse_main_metadata_together(TEST_LONG_PRIMARY, TEST_REPO_02_FILELISTS, TEST_REPO_02_OTHER,
+-                                                  NULL, NULL, pkgcb, &parsed, NULL, NULL, TRUE, &tmp_err);
+-    g_assert(tmp_err == NULL);
+-    g_assert_cmpint(ret, ==, CRE_OK);
+-    g_assert_cmpint(parsed, ==, 2);
+-}
+-
+-int
+-main(int argc, char *argv[])
+-{
+-    g_test_init(&argc, &argv, NULL);
+-
+-    g_test_add_func("/xml_parser_filelists/test_cr_xml_parse_main_metadata_together_00",
+-                    test_cr_xml_parse_main_metadata_together_00);
+-
+-    g_test_add_func("/xml_parser_filelists/test_cr_xml_parse_main_metadata_together_01_out_of_order_pkgs",
+-                    test_cr_xml_parse_main_metadata_together_01_out_of_order_pkgs);
+-
+-    g_test_add_func("/xml_parser_filelists/test_cr_xml_parse_main_metadata_together_02_invalid_path",
+-                    test_cr_xml_parse_main_metadata_together_02_invalid_path);
+-
+-    g_test_add_func("/xml_parser_filelists/test_cr_xml_parse_main_metadata_together_03_newpkgcb_returns_null",
+-                    test_cr_xml_parse_main_metadata_together_03_newpkgcb_returns_null);
+-
+-    g_test_add_func("/xml_parser_filelists/test_cr_xml_parse_main_metadata_together_04_newpkgcb_interrupt",
+-                    test_cr_xml_parse_main_metadata_together_04_newpkgcb_interrupt);
+-
+-    g_test_add_func("/xml_parser_filelists/test_cr_xml_parse_main_metadata_together_05_pkgcb_interrupt",
+-                    test_cr_xml_parse_main_metadata_together_05_pkgcb_interrupt);
+-
+-    g_test_add_func("/xml_parser_filelists/test_cr_xml_parse_main_metadata_together_06_warnings_bad_file_type",
+-                    test_cr_xml_parse_main_metadata_together_06_warnings_bad_file_type);
+-
+-    g_test_add_func("/xml_parser_filelists/test_cr_xml_parse_main_metadata_together_07_warningcb_interrupt",
+-                    test_cr_xml_parse_main_metadata_together_07_warningcb_interrupt);
+-
+-    g_test_add_func("/xml_parser_filelists/test_cr_xml_parse_main_metadata_together_08_long_primary",
+-                    test_cr_xml_parse_main_metadata_together_08_long_primary);
+-
+-    return g_test_run();
+-}
+diff --git a/tests/testdata/modified_repo_files/long_primary.xml b/tests/testdata/modified_repo_files/long_primary.xml
+deleted file mode 100644
+index 41d8a89..0000000
+--- a/tests/testdata/modified_repo_files/long_primary.xml
++++ /dev/null
+@@ -1,1060 +0,0 @@
+-<?xml version="1.0" encoding="UTF-8"?>
+-<metadata xmlns="http://linux.duke.edu/metadata/common" xmlns:rpm="http://linux.duke.edu/metadata/rpm" packages="2">
+-<package type="rpm">
+-  <name>fake_bash</name>
+-  <arch>x86_64</arch>
+-  <version epoch="0" ver="1.1.1" rel="1"/>
+-  <checksum type="sha256" pkgid="YES">90f61e546938a11449b710160ad294618a5bd3062e46f8cf851fd0088af184b7</checksum>
+-  <summary>Fake bash</summary>
+-  <description>Fake bash package</description>
+-  <packager></packager>
+-  <url>http://fake_bash_shell.com/</url>
+-  <time file="1334670842" build="1334670842"/>
+-  <size package="2237" installed="0" archive="256"/>
+-<location href="fake_bash-1.1.1-1.x86_64.rpm"/>
+-  <format>
+-    <rpm:license>GPL</rpm:license>
+-    <rpm:vendor/>
+-    <rpm:group>System Environment/Shells</rpm:group>
+-    <rpm:buildhost>localhost.localdomain</rpm:buildhost>
+-    <rpm:sourcerpm>fake_bash-1.1.1-1.src.rpm</rpm:sourcerpm>
+-    <rpm:header-range start="280" end="2057"/>
+-    <rpm:provides>
+-      <rpm:entry name="bash"/>
+-      <rpm:entry name="fake_bash" flags="EQ" epoch="0" ver="1.1.1" rel="1"/>
+-      <rpm:entry name="fake_bash(x86-64)" flags="EQ" epoch="0" ver="1.1.1" rel="1"/>
+-    </rpm:provides>
+-    <rpm:requires>
+-      <rpm:entry name="super_kernel"/>
+-    </rpm:requires>
+-    <file>/usr/bin/fake_bash</file>
+-  </format>
+-</package>
+-<package type="rpm">
+-  <name>super_kernel</name>
+-  <arch>x86_64</arch>
+-  <version epoch="0" ver="6.0.1" rel="2"/>
+-  <checksum type="sha256" pkgid="YES">6d43a638af70ef899933b1fd86a866f18f65b0e0e17dcbf2e42bfd0cdd7c63c3</checksum>
+-  <summary>Test package</summary>
+-  <description>This package has provides, requires, obsoletes, conflicts options.</description>
+-  <packager></packager>
+-  <url>http://so_super_kernel.com/it_is_awesome/yep_it_really_is</url>
+-  <time file="1334670843" build="1334670843"/>
+-  <size package="2845" installed="0" archive="404"/>
+-<location href="super_kernel-6.0.1-2.x86_64.rpm"/>
+-  <format>
+-    <rpm:license>LGPLv2</rpm:license>
+-    <rpm:vendor/>
+-    <rpm:group>Applications/System</rpm:group>
+-    <rpm:buildhost>localhost.localdomain</rpm:buildhost>
+-    <rpm:sourcerpm>super_kernel-6.0.1-2.src.rpm</rpm:sourcerpm>
+-    <rpm:header-range start="280" end="2637"/>
+-    <rpm:provides>
+-      <rpm:entry name="not_so_super_kernel" flags="LT" epoch="0" ver="5.8.0"/>
+-      <rpm:entry name="super_kernel" flags="EQ" epoch="0" ver="6.0.0"/>
+-      <rpm:entry name="super_kernel" flags="EQ" epoch="0" ver="6.0.1" rel="2"/>
+-      <rpm:entry name="super_kernel(x86-64)" flags="EQ" epoch="0" ver="6.0.1" rel="2"/>
+-    </rpm:provides>
+-    <rpm:requires>
+-      <rpm:entry name="bzip2" flags="GE" epoch="0" ver="1.0.0" pre="1"/>
+-      <rpm:entry name="expat" pre="1"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.26.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.27.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.28.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.29.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.30.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.31.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.32.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.33.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.34.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.35.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.36.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.37.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.38.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.39.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.40.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.41.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.42.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.43.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.44.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.45.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.46.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.47.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.48.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.49.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.50.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.51.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.52.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.53.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.54.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.55.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.56.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.57.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.58.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.59.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.60.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.61.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.62.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.63.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.64.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.65.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.66.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.67.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.68.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.69.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.70.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.71.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.72.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.73.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.74.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.75.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.76.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.77.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.78.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.79.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.80.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.81.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.82.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.83.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.84.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.85.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.86.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.87.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.88.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.89.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.90.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.91.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.92.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.93.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.94.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.95.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.96.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.97.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.98.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.99.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.100.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.101.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.102.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.103.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.104.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.105.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.106.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.107.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.108.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.109.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.110.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.111.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.112.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.113.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.114.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.115.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.116.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.117.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.118.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.119.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.120.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.121.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.122.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.123.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.124.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.125.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.126.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.127.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.128.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.129.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.130.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.131.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.132.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.133.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.134.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.135.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.136.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.137.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.138.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.139.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.140.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.141.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.142.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.143.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.144.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.145.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.146.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.147.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.148.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.149.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.150.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.151.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.152.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.153.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.154.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.155.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.156.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.157.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.158.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.159.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.160.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.161.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.162.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.163.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.164.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.165.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.166.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.167.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.168.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.169.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.170.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.171.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.172.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.173.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.174.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.175.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.176.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.177.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.178.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.179.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.180.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.181.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.182.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.183.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.184.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.185.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.186.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.187.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.188.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.189.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.190.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.191.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.192.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.193.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.194.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.195.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.196.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.197.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.198.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.199.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.200.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.201.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.202.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.203.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.204.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.205.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.206.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.207.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.208.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.209.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.210.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.211.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.212.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.213.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.214.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.215.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.216.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.217.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.218.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.219.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.220.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.221.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.222.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.223.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.224.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.225.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.226.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.227.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.228.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.229.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.230.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.231.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.232.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.233.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.234.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.235.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.236.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.237.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.238.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.239.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.240.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.241.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.242.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.243.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.244.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.245.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.246.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.247.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.248.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.249.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.250.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.251.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.252.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.253.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.254.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.255.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.256.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.257.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.258.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.259.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.260.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.261.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.262.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.263.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.264.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.265.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.266.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.267.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.268.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.269.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.270.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.271.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.272.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.273.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.274.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.275.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.276.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.277.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.278.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.279.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.280.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.281.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.282.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.283.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.284.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.285.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.286.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.287.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.288.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.289.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.290.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.291.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.292.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.293.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.294.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.295.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.296.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.297.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.298.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.299.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.300.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.301.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.302.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.303.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.304.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.305.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.306.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.307.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.308.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.309.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.310.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.311.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.312.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.313.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.314.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.315.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.316.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.317.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.318.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.319.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.320.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.321.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.322.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.323.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.324.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.325.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.326.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.327.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.328.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.329.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.330.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.331.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.332.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.333.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.334.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.335.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.336.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.337.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.338.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.339.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.340.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.341.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.342.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.343.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.344.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.345.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.346.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.347.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.348.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.349.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.350.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.351.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.352.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.353.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.354.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.355.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.356.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.357.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.358.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.359.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.360.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.361.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.362.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.363.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.364.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.365.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.366.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.367.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.368.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.369.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.370.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.371.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.372.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.373.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.374.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.375.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.376.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.377.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.378.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.379.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.380.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.381.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.382.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.383.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.384.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.385.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.386.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.387.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.388.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.389.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.390.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.391.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.392.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.393.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.394.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.395.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.396.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.397.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.398.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.399.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.400.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.401.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.402.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.403.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.404.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.405.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.406.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.407.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.408.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.409.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.410.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.411.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.412.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.413.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.414.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.415.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.416.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.417.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.418.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.419.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.420.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.421.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.422.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.423.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.424.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.425.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.426.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.427.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.428.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.429.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.430.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.431.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.432.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.433.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.434.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.435.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.436.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.437.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.438.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.439.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.440.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.441.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.442.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.443.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.444.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.445.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.446.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.447.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.448.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.449.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.450.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.451.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.452.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.453.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.454.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.455.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.456.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.457.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.458.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.459.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.460.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.461.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.462.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.463.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.464.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.465.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.466.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.467.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.468.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.469.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.470.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.471.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.472.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.473.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.474.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.475.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.476.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.477.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.478.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.479.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.480.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.481.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.482.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.483.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.484.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.485.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.486.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.487.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.488.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.489.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.490.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.491.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.492.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.493.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.494.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.495.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.496.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.497.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.498.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.499.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.500.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.501.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.502.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.503.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.504.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.505.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.506.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.507.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.508.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.509.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.510.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.511.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.512.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.513.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.514.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.515.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.516.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.517.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.518.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.519.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.520.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.521.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.522.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.523.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.524.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.525.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.526.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.527.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.528.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.529.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.530.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.531.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.532.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.533.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.534.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.535.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.536.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.537.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.538.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.539.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.540.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.541.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.542.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.543.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.544.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.545.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.546.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.547.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.548.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.549.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.550.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.551.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.552.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.553.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.554.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.555.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.556.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.557.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.558.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.559.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.560.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.561.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.562.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.563.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.564.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.565.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.566.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.567.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.568.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.569.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.570.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.571.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.572.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.573.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.574.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.575.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.576.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.577.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.578.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.579.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.580.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.581.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.582.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.583.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.584.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.585.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.586.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.587.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.588.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.589.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.590.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.591.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.592.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.593.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.594.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.595.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.596.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.597.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.598.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.599.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.600.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.601.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.602.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.603.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.604.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.605.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.606.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.607.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.608.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.609.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.610.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.611.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.612.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.613.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.614.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.615.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.616.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.617.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.618.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.619.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.620.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.621.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.622.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.623.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.624.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.625.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.626.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.627.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.628.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.629.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.630.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.631.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.632.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.633.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.634.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.635.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.636.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.637.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.638.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.639.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.640.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.641.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.642.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.643.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.644.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.645.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.646.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.647.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.648.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.649.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.650.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.651.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.652.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.653.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.654.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.655.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.656.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.657.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.658.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.659.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.660.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.661.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.662.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.663.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.664.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.665.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.666.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.667.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.668.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.669.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.670.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.671.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.672.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.673.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.674.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.675.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.676.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.677.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.678.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.679.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.680.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.681.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.682.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.683.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.684.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.685.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.686.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.687.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.688.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.689.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.690.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.691.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.692.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.693.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.694.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.695.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.696.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.697.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.698.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.699.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.700.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.701.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.702.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.703.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.704.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.705.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.706.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.707.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.708.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.709.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.710.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.711.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.712.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.713.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.714.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.715.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.716.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.717.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.718.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.719.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.720.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.721.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.722.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.723.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.724.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.725.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.726.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.727.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.728.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.729.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.730.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.731.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.732.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.733.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.734.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.735.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.736.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.737.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.738.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.739.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.740.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.741.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.742.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.743.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.744.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.745.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.746.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.747.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.748.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.749.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.750.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.751.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.752.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.753.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.754.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.755.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.756.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.757.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.758.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.759.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.760.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.761.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.762.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.763.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.764.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.765.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.766.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.767.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.768.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.769.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.770.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.771.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.772.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.773.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.774.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.775.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.776.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.777.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.778.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.779.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.780.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.781.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.782.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.783.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.784.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.785.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.786.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.787.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.788.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.789.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.790.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.791.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.792.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.793.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.794.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.795.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.796.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.797.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.798.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.799.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.800.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.801.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.802.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.803.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.804.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.805.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.806.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.807.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.808.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.809.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.810.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.811.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.812.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.813.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.814.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.815.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.816.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.817.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.818.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.819.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.820.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.821.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.822.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.823.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.824.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.825.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.826.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.827.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.828.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.829.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.830.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.831.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.832.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.833.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.834.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.835.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.836.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.837.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.838.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.839.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.840.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.841.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.842.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.843.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.844.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.845.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.846.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.847.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.848.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.849.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.850.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.851.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.852.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.853.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.854.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.855.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.856.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.857.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.858.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.859.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.860.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.861.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.862.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.863.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.864.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.865.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.866.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.867.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.868.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.869.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.870.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.871.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.872.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.873.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.874.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.875.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.876.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.877.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.878.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.879.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.880.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.881.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.882.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.883.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.884.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.885.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.886.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.887.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.888.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.889.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.890.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.891.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.892.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.893.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.894.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.895.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.896.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.897.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.898.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.899.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.900.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.901.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.902.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.903.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.904.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.905.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.906.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.907.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.908.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.909.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.910.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.911.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.912.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.913.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.914.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.915.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.916.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.917.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.918.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.919.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.920.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.921.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.922.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.923.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.924.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.925.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.926.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.927.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.928.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.929.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.930.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.931.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.932.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.933.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.934.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.935.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.936.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.937.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.938.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.939.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.940.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.941.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.942.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.943.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.944.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.945.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.946.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.947.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.948.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.949.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.950.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.951.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.952.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.953.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.954.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.955.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.956.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.957.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.958.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.959.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.960.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.961.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.962.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.963.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.964.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.965.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.966.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.967.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.968.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.969.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.970.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.971.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.972.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.973.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.974.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.975.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.976.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.977.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.978.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.979.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.980.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.981.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.982.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.983.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.984.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.985.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.986.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.987.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.988.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.989.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.990.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.991.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.992.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.993.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.994.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.995.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.996.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.997.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.998.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.999.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.1000.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.1001.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.1002.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.1003.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.1004.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.1005.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.1006.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.1007.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.1008.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.1009.0"/>
+-      <rpm:entry name="glib" flags="GE" epoch="0" ver="2.1010.0"/>
+-      <rpm:entry name="zlib"/>
+-    </rpm:requires>
+-    <rpm:conflicts>
+-      <rpm:entry name="kernel"/>
+-      <rpm:entry name="super_kernel" flags="EQ" epoch="0" ver="5.0.0"/>
+-      <rpm:entry name="super_kernel" flags="LT" epoch="0" ver="4.0.0"/>
+-    </rpm:conflicts>
+-    <rpm:obsoletes>
+-      <rpm:entry name="kernel"/>
+-      <rpm:entry name="super_kernel" flags="EQ" epoch="0" ver="5.9.0"/>
+-    </rpm:obsoletes>
+-    <file>/usr/bin/super_kernel</file>
+-  </format>
+-</package>
+-</metadata>
+diff --git a/tests/testdata/modified_repo_files/repo_02_different_order_filelists.xml b/tests/testdata/modified_repo_files/repo_02_different_order_filelists.xml
+deleted file mode 100644
+index 4953c95..0000000
+--- a/tests/testdata/modified_repo_files/repo_02_different_order_filelists.xml
++++ /dev/null
+@@ -1,16 +0,0 @@
+-<?xml version="1.0" encoding="UTF-8"?>
+-<filelists xmlns="http://linux.duke.edu/metadata/filelists" packages="2">
+-<package pkgid="6d43a638af70ef899933b1fd86a866f18f65b0e0e17dcbf2e42bfd0cdd7c63c3" name="super_kernel" arch="x86_64">
+-    <version epoch="0" ver="6.0.1" rel="2"/>
+-
+-    <file>/usr/bin/super_kernel</file>
+-    <file>/usr/share/man/super_kernel.8.gz</file>
+-</package>
+-
+-<package pkgid="90f61e546938a11449b710160ad294618a5bd3062e46f8cf851fd0088af184b7" name="fake_bash" arch="x86_64">
+-    <version epoch="0" ver="1.1.1" rel="1"/>
+-
+-    <file>/usr/bin/fake_bash</file>
+-</package>
+-
+-</filelists>
+-- 
+2.35.1
+
+
+From 16f3c1f1abe995fc1c0023f9109b7f5d520ff4b4 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Ale=C5=A1=20Mat=C4=9Bj?= <amatej@redhat.com>
+Date: Wed, 9 Mar 2022 15:24:05 +0100
+Subject: [PATCH 5/5] Revert "Add c API for parsing metadata together"
+
+This reverts commit ff0912d2a89722700f001ef462abd730dacaa8e7.
+---
+ src/CMakeLists.txt                      |   1 -
+ src/xml_parser.h                        |  39 --
+ src/xml_parser_main_metadata_together.c | 468 ------------------------
+ 3 files changed, 508 deletions(-)
+ delete mode 100644 src/xml_parser_main_metadata_together.c
+
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index b3ca9e6..64de052 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -31,7 +31,6 @@ SET (createrepo_c_SRCS
+      xml_parser_primary.c
+      xml_parser_repomd.c
+      xml_parser_updateinfo.c
+-     xml_parser_main_metadata_together.c
+      koji.c)
+ 
+ SET(headers
+diff --git a/src/xml_parser.h b/src/xml_parser.h
+index 5ce7c0e..a31718d 100644
+--- a/src/xml_parser.h
++++ b/src/xml_parser.h
+@@ -278,45 +278,6 @@ cr_xml_parse_updateinfo(const char *path,
+                         void *warningcb_data,
+                         GError **err);
+ 
+-/** Parse all 3 main metadata types (primary, filelists and other) at the same time.
+- * Once a package is fully parsed pkgcb is called which transfers ownership of the package
+- * to the user, cr_xml_parse_main_metadata_together no longer needs it and it can be freed.
+- * This means we don't have store all the packages in memory at the same time, which
+- * significantly reduces the memory footprint.
+- * Input metadata files can be compressed.
+- * @param primary_path       Path to a primary xml file.
+- * @param filelists_path     Path to a filelists xml file.
+- * @param other_path         Path to an other xml file.
+- * @param newpkgcb           Callback for a new package. Called when the new package
+- *                           xml chunk is found and a package object to store
+- *                           the data is needed.
+- * @param newpkgcb_data      User data for the newpkgcb.
+- * @param pkgcb              Package callback. Called when a package is completely
+- *                           parsed containing information from all 3 main metadata
+- *                           files. Could be NULL if newpkgcb is not NULL.
+- * @param pkgcb_data         User data for the pkgcb.
+- * @param warningcb          Callback for warning messages.
+- * @param warningcb_data     User data for the warningcb.
+- * @param allow_out_of_order Whether we should allow different order of packages
+- *                           among the main metadata files. If allowed, the more
+- *                           the order varies the more memory we will need to
+- *                           store all the started but unfinished packages.
+- * @param err                GError **
+- * @return                   cr_Error code.
+- */
+-int
+-cr_xml_parse_main_metadata_together(const char *primary_path,
+-                                    const char *filelists_path,
+-                                    const char *other_path,
+-                                    cr_XmlParserNewPkgCb newpkgcb,
+-                                    void *newpkgcb_data,
+-                                    cr_XmlParserPkgCb pkgcb,
+-                                    void *pkgcb_data,
+-                                    cr_XmlParserWarningCb warningcb,
+-                                    void *warningcb_data,
+-                                    gboolean allow_out_of_order,
+-                                    GError **err);
+-
+ /** @} */
+ 
+ #ifdef __cplusplus
+diff --git a/src/xml_parser_main_metadata_together.c b/src/xml_parser_main_metadata_together.c
+deleted file mode 100644
+index 9347c79..0000000
+--- a/src/xml_parser_main_metadata_together.c
++++ /dev/null
+@@ -1,468 +0,0 @@
+-/*
+- * Copyright (C) 2021 Red Hat, Inc.
+- *
+- * Licensed under the GNU Lesser General Public License Version 2.1
+- *
+- * This library is free software; you can redistribute it and/or
+- * modify it under the terms of the GNU Lesser General Public
+- * License as published by the Free Software Foundation; either
+- * version 2.1 of the License, or (at your option) any later version.
+- *
+- * This library is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+- * Lesser General Public License for more details.
+- *
+- * You should have received a copy of the GNU Lesser General Public
+- * License along with this library; if not, write to the Free Software
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+- */
+-
+-#include <glib.h>
+-#include <glib/gprintf.h>
+-#include <assert.h>
+-#include <errno.h>
+-#include "error.h"
+-#include "xml_parser.h"
+-#include "xml_parser_internal.h"
+-#include "package_internal.h"
+-#include "misc.h"
+-
+-#define ERR_DOMAIN      CREATEREPO_C_ERROR
+-
+-typedef struct {
+-    GHashTable           *in_progress_pkgs_hash; //used only when allowing out of order pkgs
+-    GSList               *in_progress_pkgs_list; // used only when not allowing out of order pkgs
+-    int                  in_progress_count_primary;
+-    int                  in_progress_count_filelists;
+-    int                  in_progress_count_other;
+-    cr_XmlParserNewPkgCb newpkgcb;      // newpkgcb passed in from user
+-    void                 *newpkgcb_data;// newpkgcb data passed in from user
+-    cr_XmlParserPkgCb    pkgcb;         // pkgcb passed in from user
+-    void                 *pkgcb_data;   // pkgcb data passed in from user
+-} cr_CbData;
+-
+-static int
+-call_user_callback_if_package_finished(cr_Package *pkg, cr_CbData *cb_data, GError **err)
+-{
+-    if (pkg && (pkg->loadingflags & CR_PACKAGE_LOADED_PRI) && (pkg->loadingflags & CR_PACKAGE_LOADED_OTH) &&
+-        (pkg->loadingflags & CR_PACKAGE_LOADED_FIL))
+-    {
+-        if (cb_data->in_progress_pkgs_hash) {
+-            g_hash_table_remove(cb_data->in_progress_pkgs_hash, pkg->pkgId);
+-        } else {
+-            //remove first element in the list
+-            cb_data->in_progress_pkgs_list = cb_data->in_progress_pkgs_list->next;
+-        }
+-
+-        // One package was fully finished
+-        cb_data->in_progress_count_primary--;
+-        cb_data->in_progress_count_filelists--;
+-        cb_data->in_progress_count_other--;
+-
+-        // call user package callback
+-        GError *tmp_err = NULL;
+-        if (cb_data->pkgcb && cb_data->pkgcb(pkg, cb_data->pkgcb_data, &tmp_err)) {
+-            if (tmp_err)
+-                g_propagate_prefixed_error(err, tmp_err, "Parsing interrupted: ");
+-            else
+-                g_set_error(err, ERR_DOMAIN, CRE_CBINTERRUPTED, "Parsing interrupted");
+-            return CR_CB_RET_ERR;
+-        } else {
+-            // If callback return CRE_OK but it simultaneously set
+-            // the tmp_err then it's a programming error.
+-            assert(tmp_err == NULL);
+-        };
+-    }
+-    return CR_CB_RET_OK;
+-}
+-
+-static cr_Package*
+-find_in_progress_pkg(cr_CbData *cb_data, const char *pkgId, int in_progress_pkg_index, GError **err)
+-{
+-    gpointer pval = NULL;
+-    if (cb_data->in_progress_pkgs_hash) {
+-        if (!g_hash_table_lookup_extended(cb_data->in_progress_pkgs_hash, pkgId, NULL, &pval)) {
+-            pval = NULL;
+-        }
+-    } else {
+-        // This is checking out of order pkgs because if we don't have in_progress_pkgs_hash -> we enforce
+-        // order by using a list
+-        pval = g_slist_nth_data(cb_data->in_progress_pkgs_list, in_progress_pkg_index);
+-        if (pval && g_strcmp0(((cr_Package *) pval)->pkgId, pkgId)) {
+-            g_set_error(err, ERR_DOMAIN, CRE_XMLPARSER,
+-                        "Out of order metadata: %s vs %s.", ((cr_Package *) pval)->pkgId, pkgId);
+-            pval = NULL;
+-        }
+-    }
+-
+-    return pval;
+-}
+-
+-static void
+-store_in_progress_pkg(cr_CbData *cb_data, cr_Package *pkg, const char *pkgId)
+-{
+-    if (!pkg) {
+-        return;
+-    }
+-    if (cb_data->in_progress_pkgs_hash) {
+-        g_hash_table_insert(cb_data->in_progress_pkgs_hash, g_strdup(pkgId), pkg);
+-    } else {
+-        cb_data->in_progress_pkgs_list = g_slist_append(cb_data->in_progress_pkgs_list, pkg);
+-    }
+-}
+-
+-static int
+-newpkgcb_primary(cr_Package **pkg,
+-                    G_GNUC_UNUSED const char *pkgId,
+-                    G_GNUC_UNUSED const char *name,
+-                    G_GNUC_UNUSED const char *arch,
+-                    G_GNUC_UNUSED void *cbdata,
+-                    GError **err)
+-{
+-    assert(pkg && *pkg == NULL);
+-    assert(!err || *err == NULL);
+-
+-    // This callback is called when parsing of the opening element of a package
+-    // is done. However because the opening element doesn't contain pkgId
+-    // (instead it looks like: <package type="rpm">) we cannot check if we
+-    // already have this package.
+-    // The only option is to create a new package and after its fully
+-    // parsed (in pkgcb_primary) either use this package or copy its data
+-    // into an already existing one.
+-    // Filelists and other have pkgId present in the opening element so we can
+-    // avoid this overhead.
+-    *pkg = cr_package_new();
+-
+-    return CR_CB_RET_OK;
+-}
+-
+-static int
+-newpkg_general(cr_Package **pkg,
+-                 const char *pkgId,
+-                 const char *name,
+-                 const char *arch,
+-                 void *cbdata,
+-                 int in_progress_count,
+-                 GError **err)
+-{
+-    assert(pkg && *pkg == NULL);
+-    assert(!err || *err == NULL);
+-
+-    cr_CbData *cb_data = cbdata;
+-
+-    GError *out_of_order_err = NULL;
+-    *pkg = find_in_progress_pkg(cb_data, pkgId, in_progress_count, &out_of_order_err);
+-
+-    if (!*pkg) {
+-        // we are handling never before seen package
+-
+-        if (cb_data->newpkgcb) {
+-            // user specified their own new function: call it
+-            if (cb_data->newpkgcb(pkg, pkgId, name, arch, cb_data->newpkgcb_data, err)) {
+-                return CR_CB_RET_ERR;
+-            }
+-            if (!*pkg) {
+-                // when the user callback doesn't return a pkg we should skip it,
+-                // this means out of order error doesn't apply
+-                g_clear_error(&out_of_order_err);
+-            }
+-        } else {
+-            *pkg = cr_package_new();
+-        }
+-
+-        store_in_progress_pkg(cb_data, *pkg, pkgId);
+-    }
+-
+-    if (*err) {
+-        return CR_CB_RET_ERR;
+-    }
+-
+-    if (out_of_order_err) {
+-        g_propagate_error(err, out_of_order_err);
+-        return CR_CB_RET_ERR;
+-    }
+-
+-    return CR_CB_RET_OK;
+-}
+-
+-static int
+-newpkgcb_filelists(cr_Package **pkg,
+-                   const char *pkgId,
+-                   G_GNUC_UNUSED const char *name,
+-                   G_GNUC_UNUSED const char *arch,
+-                   void *cbdata,
+-                   GError **err)
+-{
+-    cr_CbData *cb_data = cbdata;
+-    return newpkg_general(pkg, pkgId, name, arch, cbdata, cb_data->in_progress_count_filelists, err);
+-}
+-
+-static int
+-newpkgcb_other(cr_Package **pkg,
+-               const char *pkgId,
+-               G_GNUC_UNUSED const char *name,
+-               G_GNUC_UNUSED const char *arch,
+-               void *cbdata,
+-               GError **err)
+-{
+-    cr_CbData *cb_data = cbdata;
+-    return newpkg_general(pkg, pkgId, name, arch, cbdata, cb_data->in_progress_count_other, err);
+-}
+-
+-static int
+-pkgcb_filelists(cr_Package *pkg, void *cbdata, G_GNUC_UNUSED GError **err)
+-{
+-    cr_CbData *cb_data = cbdata;
+-    cb_data->in_progress_count_filelists++;
+-    pkg->loadingflags |= CR_PACKAGE_LOADED_FIL;
+-    return call_user_callback_if_package_finished(pkg, cb_data, err);
+-}
+-
+-static int
+-pkgcb_other(cr_Package *pkg, void *cbdata, G_GNUC_UNUSED GError **err)
+-{
+-    cr_CbData *cb_data = cbdata;
+-    cb_data->in_progress_count_other++;
+-    pkg->loadingflags |= CR_PACKAGE_LOADED_OTH;
+-    return call_user_callback_if_package_finished(pkg, cb_data, err);
+-}
+-
+-static int
+-pkgcb_primary(cr_Package *pkg, void *cbdata, G_GNUC_UNUSED GError **err)
+-{
+-    cr_CbData *cb_data = cbdata;
+-
+-    GError *out_of_order_err = NULL;
+-    cr_Package *in_progress_pkg = find_in_progress_pkg(cb_data, pkg->pkgId, cb_data->in_progress_count_primary,
+-                                                       &out_of_order_err);
+-    if (in_progress_pkg) {
+-        // package was already encountered in some other metadata type
+-
+-        cr_package_copy_into(pkg, in_progress_pkg);
+-        cr_package_free(pkg);
+-        pkg = in_progress_pkg;
+-    } else {
+-        // we are handling never before seen package
+-
+-        if (cb_data->newpkgcb) {
+-            // user specified their own new function: call it and copy package data into user_created_pkg
+-            cr_Package *user_created_pkg = NULL;
+-            if (cb_data->newpkgcb(&user_created_pkg, pkg->pkgId, pkg->name, pkg->arch, cb_data->newpkgcb_data, err)) {
+-                return CR_CB_RET_ERR;
+-            } else {
+-                if (user_created_pkg) {
+-                    cr_package_copy_into(pkg, user_created_pkg);
+-                }
+-                // user_created_pkg can be NULL if newpkgcb returns OK but
+-                // not an allocated pkg -> this means we should skip it
+-                store_in_progress_pkg(cb_data, user_created_pkg, pkg->pkgId);
+-                cr_package_free(pkg);
+-                pkg = user_created_pkg;
+-            }
+-            if (!pkg) {
+-                // when the user callback doesn't return a pkg we should skip it,
+-                // this means out of order error doesn't apply
+-                g_clear_error(&out_of_order_err);
+-            }
+-        } else {
+-            store_in_progress_pkg(cb_data, pkg, pkg->pkgId);
+-        }
+-
+-    }
+-
+-    if (*err) {
+-        return CR_CB_RET_ERR;
+-    }
+-
+-    if (out_of_order_err) {
+-        g_propagate_error(err, out_of_order_err);
+-        return CR_CB_RET_ERR;
+-    }
+-
+-
+-    if (pkg) {
+-        cb_data->in_progress_count_primary++;
+-        pkg->loadingflags |= CR_PACKAGE_LOADED_PRI;
+-        pkg->loadingflags |= CR_PACKAGE_FROM_XML;
+-    }
+-
+-    return call_user_callback_if_package_finished(pkg, cb_data, err);
+-}
+-
+-static gboolean
+-parse_next_section(CR_FILE *target_file, const char *path, cr_ParserData *pd, GError **err)
+-{
+-    char buf[XML_BUFFER_SIZE];
+-    GError *tmp_err = NULL;
+-    int parsed_len = cr_read(target_file, buf, XML_BUFFER_SIZE, &tmp_err);
+-    if (tmp_err) {
+-        g_critical("%s: Error while reading xml '%s': %s", __func__, path, tmp_err->message);
+-        g_propagate_prefixed_error(err, tmp_err, "Read error: ");
+-        return FALSE;
+-    }
+-    int done = parsed_len == 0;
+-    if (xmlParseChunk(pd->parser, buf, parsed_len, done)) {
+-        xmlErrorPtr xml_err = xmlCtxtGetLastError(pd->parser);
+-        g_critical("%s: parsing error '%s': %s", __func__, path,
+-                   (xml_err) ? xml_err->message : "UNKNOWN_ERROR");
+-        g_set_error(err, ERR_DOMAIN, CRE_XMLPARSER,
+-                    "Parse error '%s' at line: %d (%s)",
+-                    path,
+-                    (xml_err) ? (int) xml_err->line : 0,
+-                    (xml_err) ? (char *) xml_err->message : "UNKNOWN_ERROR");
+-        return FALSE;
+-    }
+-
+-    if (pd->err) {
+-        g_propagate_error(err, pd->err);
+-        return FALSE;
+-    }
+-
+-    return done;
+-}
+-
+-//TODO(amatej): there is quite some overlap with this and cr_load_xml_files,
+-//              we could use this api and just wrap it in cr_loax_xml_files?
+-int cr_xml_parse_main_metadata_together(const char *primary_path,
+-                                        const char *filelists_path,
+-                                        const char *other_path,
+-                                        cr_XmlParserNewPkgCb newpkgcb,
+-                                        void *newpkgcb_data,
+-                                        cr_XmlParserPkgCb pkgcb,
+-                                        void *pkgcb_data,
+-                                        cr_XmlParserWarningCb warningcb,
+-                                        void *warningcb_data,
+-                                        gboolean allow_out_of_order,
+-                                        GError **err)
+-{
+-    int ret = CRE_OK;
+-    CR_FILE *primary_f = NULL;
+-    CR_FILE *filelists_f = NULL;
+-    CR_FILE *other_f = NULL;
+-    GError *tmp_err = NULL;
+-
+-    cr_CbData cbdata;
+-    cbdata.in_progress_pkgs_list = NULL;
+-    cbdata.in_progress_pkgs_hash = NULL;
+-    cbdata.newpkgcb = newpkgcb;
+-    cbdata.newpkgcb_data = newpkgcb_data;
+-    cbdata.pkgcb = pkgcb;
+-    cbdata.pkgcb_data = pkgcb_data;
+-
+-    if (allow_out_of_order) {
+-        cbdata.in_progress_pkgs_hash = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+-    }
+-
+-    assert(primary_path);
+-    assert(filelists_path);
+-    assert(other_path);
+-    assert(newpkgcb || pkgcb);
+-    assert(!err || *err == NULL);
+-
+-    cr_ParserData *primary_pd = NULL;
+-    cr_ParserData *filelists_pd = NULL;
+-    cr_ParserData *other_pd = NULL;
+-
+-    primary_f = cr_open(primary_path, CR_CW_MODE_READ, CR_CW_AUTO_DETECT_COMPRESSION, &tmp_err);
+-    if (tmp_err) {
+-        ret = tmp_err->code;
+-        g_propagate_prefixed_error(err, tmp_err, "Cannot open %s: ", primary_path);
+-        g_clear_error(&tmp_err);
+-        goto out;
+-    }
+-    filelists_f = cr_open(filelists_path, CR_CW_MODE_READ, CR_CW_AUTO_DETECT_COMPRESSION, &tmp_err);
+-    if (tmp_err) {
+-        ret = tmp_err->code;
+-        g_propagate_prefixed_error(err, tmp_err, "Cannot open %s: ", filelists_path);
+-        g_clear_error(&tmp_err);
+-        goto out;
+-    }
+-    other_f = cr_open(other_path, CR_CW_MODE_READ, CR_CW_AUTO_DETECT_COMPRESSION, &tmp_err);
+-    if (tmp_err) {
+-        ret = tmp_err->code;
+-        g_propagate_prefixed_error(err, tmp_err, "Cannot open %s: ", other_path);
+-        g_clear_error(&tmp_err);
+-        goto out;
+-    }
+-
+-    //TODO(amatej): In the future we could make filelists/other optional if there is a need for it. That would mean we
+-    //              should replace the last 0 in primary_parser_data_new depending on whether we have filelists or not.
+-    primary_pd = primary_parser_data_new(newpkgcb_primary, &cbdata, pkgcb_primary, &cbdata, warningcb, warningcb_data, 0);
+-    filelists_pd = filelists_parser_data_new(newpkgcb_filelists, &cbdata, pkgcb_filelists, &cbdata, warningcb, warningcb_data);
+-    other_pd = other_parser_data_new(newpkgcb_other, &cbdata, pkgcb_other, &cbdata, warningcb, warningcb_data);
+-
+-    gboolean primary_is_done = 0;
+-    gboolean filelists_is_done = 0;
+-    gboolean other_is_done = 0;
+-    cbdata.in_progress_count_primary = 0;
+-    cbdata.in_progress_count_filelists = 0;
+-    cbdata.in_progress_count_other = 0;
+-    while (!primary_is_done || !filelists_is_done || !other_is_done) {
+-        while ((cbdata.in_progress_count_primary <= cbdata.in_progress_count_filelists ||
+-                cbdata.in_progress_count_primary <= cbdata.in_progress_count_other) &&
+-               !primary_is_done)
+-        {
+-            primary_is_done = parse_next_section(primary_f, primary_path, primary_pd, err);
+-            if (*err) {
+-                ret = (*err)->code;
+-                goto out;
+-            }
+-
+-        }
+-
+-        while ((cbdata.in_progress_count_filelists <= cbdata.in_progress_count_primary ||
+-                cbdata.in_progress_count_filelists <= cbdata.in_progress_count_other) &&
+-               !filelists_is_done)
+-        {
+-            filelists_is_done = parse_next_section(filelists_f, filelists_path, filelists_pd, err);
+-            if (*err) {
+-                ret = (*err)->code;
+-                goto out;
+-            }
+-        }
+-
+-        while ((cbdata.in_progress_count_other <= cbdata.in_progress_count_filelists ||
+-                cbdata.in_progress_count_other <= cbdata.in_progress_count_primary) &&
+-               !other_is_done)
+-        {
+-            other_is_done = parse_next_section(other_f, other_path, other_pd, err);
+-            if (*err) {
+-                ret = (*err)->code;
+-                goto out;
+-            }
+-        }
+-    }
+-
+-out:
+-    if (ret != CRE_OK) {
+-        // An error already encountered
+-        // just close the file without error checking
+-        cr_close(primary_f, NULL);
+-        cr_close(filelists_f, NULL);
+-        cr_close(other_f, NULL);
+-    } else {
+-        // No error encountered yet
+-        cr_close(primary_f, &tmp_err);
+-        if (!tmp_err)
+-            cr_close(filelists_f, &tmp_err);
+-        if (!tmp_err)
+-            cr_close(other_f, &tmp_err);
+-        if (tmp_err) {
+-            ret = tmp_err->code;
+-            g_propagate_prefixed_error(err, tmp_err, "Error while closing: ");
+-        }
+-    }
+-
+-    cr_xml_parser_data_free(primary_pd);
+-    cr_xml_parser_data_free(filelists_pd);
+-    cr_xml_parser_data_free(other_pd);
+-
+-    if (allow_out_of_order) {
+-        g_hash_table_destroy(cbdata.in_progress_pkgs_hash);
+-    } else {
+-        cr_slist_free_full(cbdata.in_progress_pkgs_list, (GDestroyNotify) cr_package_free);
+-    }
+-
+-    return ret;
+-}
+-- 
+2.35.1
+

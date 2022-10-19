@@ -1,0 +1,48 @@
+# "Garbage" from compilation
+*.o
+*.so
+*.pyc
+*_wrap.c
+snippets/
+
+# Packages and tarball
+createrepo*.rpm
+python-createrepo*.rpm
+createrepo_c-*.tar.xz
+
+# Makefile generated files
+Makefile
+cmake_install.cmake
+install_manifest.txt
+CMakeCache.txt
+CMakeFiles
+CPackConfig.cmake
+CPackSourceConfig.cmake
+_CPack_Packages/
+src/version.h
+src/createrepo_c.pc
+src/deltarpms.h
+src/python/createrepo_c/
+_skbuild/
+
+# Python distribution stuff
+dist/
+MANIFEST
+*.egg-info/
+
+# Devel stuff
+notes
+build/
+tags
+*_
+
+# Deltarepo acceptance tests
+deltarepo/acceptance_tests/repos/repo*/repodata
+
+# Bug fixing and feature request temp directories
+BUG*/
+JIRA*/
+ISSUE*/
+
+# vim swap files
+*.sw?
